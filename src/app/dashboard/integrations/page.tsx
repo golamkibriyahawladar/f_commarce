@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Facebook, 
   Instagram, 
@@ -11,25 +11,35 @@ import {
   AlertCircle,
   Settings2,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
+import { useAuthStore } from '@/store/authStore';
 
-const integrations = [
+// Add FB typing for TypeScript
+declare global {
+  interface Window {
+    fbAsyncInit: () => void;
+    FB: any;
+  }
+}
+
+const initialIntegrations = [
   {
     id: 'facebook',
     name: 'Facebook Messenger',
     description: 'Connect your Facebook Page to receive and reply to messages directly from the omnichannel inbox.',
     icon: <Facebook className="w-8 h-8 text-blue-600" />,
-    status: 'connected',
-    lastSync: '2 minutes ago'
+    status: 'disconnected', // changed to disconnected by default
+    lastSync: null
   },
   {
     id: 'instagram',
     name: 'Instagram Direct',
     description: 'Manage Instagram DMs and story replies in real-time alongside other channels.',
     icon: <Instagram className="w-8 h-8 text-pink-600" />,
-    status: 'connected',
-    lastSync: '5 minutes ago'
+    status: 'disconnected',
+    lastSync: null
   },
   {
     id: 'whatsapp',
@@ -50,7 +60,84 @@ const integrations = [
 ];
 
 export default function IntegrationsPage() {
-  const [activeTab, setActiveTab] = useState('all');
+  const [integrations, setIntegrations] = useState(initialIntegrations);
+  const [loading, setLoading] = useState(false);
+  const { profile } = useAuthStore();
+
+  useEffect(() => {
+    // Load Facebook SDK
+    window.fbAsyncInit = function() {
+      window.FB.init({
+        appId            : process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '', // Make sure this is in your .env.local
+        autoLogAppEvents : true,
+        xfbml            : true,
+        version          : 'v19.0'
+      });
+    };
+
+    // Async load script
+    (function(d, s, id) {
+       var js: any, fjs: any = d.getElementsByTagName(s)[0];
+       if (d.getElementById(id)) {return;}
+       js = d.createElement(s); js.id = id;
+       js.src = "https://connect.facebook.net/en_US/sdk.js";
+       fjs.parentNode.insertBefore(js, fjs);
+     }(document, 'script', 'facebook-jssdk'));
+  }, []);
+
+  const handleConnectFacebook = () => {
+    if (!window.FB) {
+      alert("Facebook SDK not loaded yet.");
+      return;
+    }
+
+    setLoading(true);
+
+    window.FB.login((response: any) => {
+      if (response.authResponse) {
+        const accessToken = response.authResponse.accessToken;
+        
+        // Send the access token to our backend to exchange for long-lived token & fetch pages
+        fetch('/api/integrations/facebook/pages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            accessToken,
+            userId: profile?.id,
+            companyId: profile?.company_id
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            alert(`Successfully connected ${data.pagesSaved} pages!`);
+            // Update UI state
+            setIntegrations(integrations.map(int => 
+              int.id === 'facebook' ? { ...int, status: 'connected', lastSync: 'Just now' } : int
+            ));
+          } else {
+            alert("Error saving pages: " + data.error);
+          }
+        })
+        .catch(err => {
+          console.error("Fetch error", err);
+          alert("An error occurred while linking Facebook.");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+
+      } else {
+        console.log('User cancelled login or did not fully authorize.');
+        setLoading(false);
+      }
+    }, {
+      // Required scopes for inbox + lead ads + comments
+      scope: 'pages_show_list,pages_messaging,pages_read_engagement,leads_retrieval'
+    });
+  };
 
   return (
     <div className="p-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -112,11 +199,20 @@ export default function IntegrationsPage() {
                 )}
               </div>
               
-              <button className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors ${
-                app.status === 'disconnected' 
-                  ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
-                  : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-              }`}>
+              <button 
+                onClick={() => {
+                  if (app.id === 'facebook' && app.status === 'disconnected') {
+                    handleConnectFacebook();
+                  }
+                }}
+                disabled={loading && app.id === 'facebook'}
+                className={`flex items-center gap-2 text-sm font-medium px-4 py-1.5 rounded-lg transition-colors ${
+                  app.status === 'disconnected' 
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800' 
+                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                }`}
+              >
+                {loading && app.id === 'facebook' && <Loader2 className="w-4 h-4 animate-spin" />}
                 {app.status === 'disconnected' ? 'Connect' : 'Manage'}
               </button>
             </div>
