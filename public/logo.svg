@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2009 783" width="2009" height="783">
+  <defs>
+    <style>
+      .wordmark { font-family: 'Poppins', sans-serif; font-weight: 700; }
+    </style>
+    <mask id="wheelMask">
+      <rect x="320" y="335" width="180" height="70" fill="white"/>
+      <circle cx="355.5" cy="369.5" r="12" fill="black"/>
+      <circle cx="465.5" cy="369.5" r="12" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- ICON: translated into place from traced coordinate space (crop offset 220,160) -->
+  <g transform="translate(220,160)">
+    <!-- A outline -->
+    <path d="M 313,19 L 217,18 L 87,277 L 140,250 L 200,236 L 261,115 L 291,169 L 385,168 Z" fill="#18A674"/>
+    <!-- Leaf / swoosh -->
+    <path d="M 285,204 L 264,229 L 240,245 L 221,252 L 180,259 L 149,268 L 122,280 L 90,300 L 60,328 L 48,344 L 15,409 L 111,410 L 141,351 L 155,336 L 172,327 L 235,313 L 264,296 L 282,276 L 291,256 L 292,230 Z" fill="#18A674"/>
+    <!-- Cart basket -->
+    <path d="M 294,177 L 343,281 L 352,273 L 366,231 L 416,230 L 408,209 L 411,195 L 496,198 L 473,295 L 318,296 L 314,301 L 318,316 L 476,316 L 492,306 L 517,196 L 510,179 Z" fill="#18A674"/>
+    <!-- Cart wheels + axle -->
+    <g fill="#172428" mask="url(#wheelMask)">
+      <rect x="355" y="340" width="111" height="18" />
+      <circle cx="355.5" cy="369.5" r="30.5"/>
+      <circle cx="465.5" cy="369.5" r="30.5"/>
+    </g>
+  </g>
+
+  <!-- WORDMARK -->
+  <text x="805" y="519" class="wordmark" font-size="287" fill="#172428" letter-spacing="-2">autozy</text>
+</svg>

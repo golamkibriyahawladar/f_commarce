@@ -94,7 +94,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl border border-zinc-200 shadow-sm">
         <div>
           <div className="flex justify-center">
-            <span className="text-emerald-500 font-bold text-3xl tracking-tight">AiChat<span className="text-zinc-900">Suite</span></span>
+            <img src="/logo.svg" alt="Autozy" className="h-10 w-auto" />
           </div>
           <h2 className="mt-6 text-center text-2xl font-bold tracking-tight text-zinc-900">
             Sign in to your account

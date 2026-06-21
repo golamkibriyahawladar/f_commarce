@@ -229,7 +229,7 @@ export default function IntegrationsPage() {
           <h2 className="text-xl font-bold text-indigo-900 mb-2">Custom Integration via Webhooks</h2>
           <p className="text-indigo-800/80 mb-6 leading-relaxed">
             Need to bring data from your custom website, WordPress, Shopify, or external CRM? 
-            Use our unified Webhook API to push leads, orders, or custom events directly into AiChat Suite.
+            Use our unified Webhook API to push leads, orders, or custom events directly into Autozy.
           </p>
           <div className="flex flex-wrap gap-4">
             <button className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-2">

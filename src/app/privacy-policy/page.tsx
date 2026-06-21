@@ -11,9 +11,7 @@ export default function PrivacyPolicy() {
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-emerald-600" />
-            <span className="font-bold text-zinc-900 tracking-tight">
-              AiChat<span className="text-emerald-600">Suite</span>
-            </span>
+            <img src="/logo.svg" alt="Autozy" className="h-7 w-auto" />
           </div>
           <a
             href="/login"
@@ -40,7 +38,7 @@ export default function PrivacyPolicy() {
           <div className="p-6 bg-emerald-50/50 rounded-2xl border border-emerald-100/50 mb-10 flex gap-4 items-start">
             <Info className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
             <div className="text-sm text-emerald-800 leading-relaxed">
-              We respect your privacy and are committed to protecting it. This Privacy Policy explains how <strong>AiChat Suite</strong> collects, processes, and protects your information, especially when you connect your Meta (Facebook/Instagram) accounts to our platform.
+              We respect your privacy and are committed to protecting it. This Privacy Policy explains how <strong>Autozy</strong> collects, processes, and protects your information, especially when you connect your Meta (Facebook/Instagram) accounts to our platform.
             </div>
           </div>
 
@@ -52,7 +50,7 @@ export default function PrivacyPolicy() {
                 1. Information We Collect
               </h2>
               <p className="text-zinc-600 leading-relaxed mb-4">
-                When you register and use AiChat Suite, we collect the following types of information:
+                When you register and use Autozy, we collect the following types of information:
               </p>
               <ul className="list-disc pl-6 space-y-2 text-zinc-600 text-sm">
                 <li><strong>Account Information:</strong> Your name, email address, password, and profile preferences when you register.</li>
@@ -99,7 +97,7 @@ export default function PrivacyPolicy() {
                 <div>
                   <h4 className="font-semibold text-zinc-800 text-sm">Requesting Full Deletion:</h4>
                   <p className="text-zinc-600 text-xs mt-1">
-                    If you wish to completely remove your account and all associated Facebook/Google integration data from our systems, please send a deletion request to <strong className="text-zinc-900">support@aichatsuite.com</strong>. We will permanently delete your records within 48 hours.
+                    If you wish to completely remove your account and all associated Facebook/Google integration data from our systems, please send a deletion request to <strong className="text-zinc-900">support@autozy.app</strong>. We will permanently delete your records within 48 hours.
                   </p>
                 </div>
               </div>
@@ -115,7 +113,7 @@ export default function PrivacyPolicy() {
                 If you have any questions or concerns regarding this Privacy Policy or data processing, you can contact us at:
               </p>
               <div className="mt-3 text-sm text-zinc-900 font-medium">
-                Email: support@aichatsuite.com
+                Email: support@autozy.app
               </div>
             </div>
           </section>
@@ -123,7 +121,7 @@ export default function PrivacyPolicy() {
 
         {/* Footer */}
         <footer className="mt-20 pt-8 border-t border-zinc-200 text-center text-xs text-zinc-500">
-          &copy; {new Date().getFullYear()} AiChat Suite. All rights reserved.
+          &copy; {new Date().getFullYear()} Autozy. All rights reserved.
         </footer>
       </main>
     </div>

@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'aichat_suite_secure_token';
+const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'autozy_secure_token';
 
-// Supabase Admin Client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+function getSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 // Webhook Verification (GET request from Meta)
 export async function GET(req: Request) {
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
 
 async function handleIncomingMessage(pageId: string, senderId: string, text: string) {
   console.log(`Received message for page ${pageId} from ${senderId}: ${text}`);
+  const supabase = getSupabase();
   
   // 1. Find the integration to get the company_id
   const { data: integration } = await supabase

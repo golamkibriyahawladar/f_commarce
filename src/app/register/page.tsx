@@ -23,26 +23,7 @@ export default function RegisterPage() {
     setSuccessMsg('');
 
     try {
-      // 1. Create company first if owner
-      let companyId: string | null = null;
-      
-      if (role === 'owner' && companyName.trim()) {
-        const slug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        const { data: companyData, error: companyError } = await supabase
-          .from('companies')
-          .insert({
-            name: companyName,
-            slug: `${slug}-${Math.floor(1000 + Math.random() * 9000)}`,
-            settings: {}
-          })
-          .select()
-          .single();
-
-        if (companyError) throw companyError;
-        companyId = companyData.id;
-      }
-
-      // 2. Sign up using supabase auth
+      // Sign up using supabase auth with metadata, allowing the trigger to handle profile & company creation
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -50,6 +31,7 @@ export default function RegisterPage() {
           data: {
             full_name: fullName,
             role: role,
+            company_name: role === 'owner' ? companyName : undefined,
           }
         }
       });
@@ -57,18 +39,6 @@ export default function RegisterPage() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // If owner, associate profile with company
-        if (companyId) {
-          const { error: profileUpdateError } = await supabase
-            .from('profiles')
-            .update({ company_id: companyId })
-            .eq('id', authData.user.id);
-
-          if (profileUpdateError) {
-            console.error('Profile company link error:', profileUpdateError);
-          }
-        }
-        
         setSuccessMsg('Registration successful! Please check your email or proceed to login.');
         setTimeout(() => {
           router.push('/login');
@@ -101,7 +71,7 @@ export default function RegisterPage() {
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl border border-zinc-200 shadow-sm">
         <div>
           <div className="flex justify-center">
-            <span className="text-emerald-500 font-bold text-3xl tracking-tight">AiChat<span className="text-zinc-900">Suite</span></span>
+            <img src="/logo.svg" alt="Autozy" className="h-10 w-auto" />
           </div>
           <h2 className="mt-6 text-center text-2xl font-bold tracking-tight text-zinc-900">
             Create your account

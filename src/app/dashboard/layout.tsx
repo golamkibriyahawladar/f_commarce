@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   MessageSquare, 
   Users, 
@@ -97,11 +98,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo Section */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-zinc-200">
           {(!collapsed || isMobile) ? (
-            <span className="text-emerald-500 font-bold text-lg tracking-tight">
-              AiChat<span className="text-zinc-900">Suite</span>
-            </span>
+            <Image src="/logo.svg" alt="Autozy" width={120} height={40} className="h-8 w-auto" />
           ) : (
-            <span className="text-emerald-500 font-bold text-lg mx-auto">Ai</span>
+            <Image src="/icon.svg" alt="Autozy" width={32} height={32} className="h-8 w-8 mx-auto" />
           )}
           
           {!isMobile && (

@@ -193,24 +193,34 @@ RETURNS TRIGGER AS $$
 DECLARE
   new_company_id UUID;
   company_name TEXT;
+  user_role TEXT;
 BEGIN
-  -- Create a default company for the new user (tenant)
-  company_name := COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)) || '''s Company';
-  
-  INSERT INTO public.companies (name, slug)
-  VALUES (
-    company_name,
-    LOWER(REGEXP_REPLACE(company_name, '[^a-zA-Z0-9]+', '-', 'g')) || '-' || FLOOR(RANDOM() * 1000000)::TEXT
-  )
-  RETURNING id INTO new_company_id;
+  user_role := COALESCE(new.raw_user_meta_data->>'role', 'owner');
 
-  -- Create a profile for the user, mapping them as owner of the new company
+  -- Create a company if the user is an owner (default role)
+  IF user_role = 'owner' THEN
+    company_name := COALESCE(
+      new.raw_user_meta_data->>'company_name',
+      COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)) || '''s Company'
+    );
+    
+    INSERT INTO public.companies (name, slug)
+    VALUES (
+      company_name,
+      LOWER(REGEXP_REPLACE(company_name, '[^a-zA-Z0-9]+', '-', 'g')) || '-' || FLOOR(RANDOM() * 1000000)::TEXT
+    )
+    RETURNING id INTO new_company_id;
+  ELSE
+    new_company_id := NULL;
+  END IF;
+
+  -- Create a profile for the user, mapping them to the company if created
   INSERT INTO public.profiles (id, email, full_name, role, company_id)
   VALUES (
     new.id,
     new.email,
     COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    'owner',
+    user_role,
     new_company_id
   );
   
