@@ -74,46 +74,98 @@ async function handleIncomingMessage(pageId: string, senderId: string, text: str
   console.log(`Received message for page ${pageId} from ${senderId}: ${text}`);
   const supabase = getSupabase();
   
-  // 1. Find the integration to get the company_id
-  const { data: integration } = await supabase
+  // 1. Find the integration to get the company_id and integration_id
+  const { data: integration, error: intErr } = await supabase
     .from('integrations')
-    .select('company_id')
+    .select('id, company_id')
     .eq('credentials->>page_id', pageId)
     .single();
 
-  if (!integration) return;
+  if (intErr || !integration) {
+    console.error('Integration not found for page:', pageId, intErr);
+    return;
+  }
 
-  // 2. Find or create a conversation
+  // 2. Find or create a customer
+  let { data: customer, error: custFindErr } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('company_id', integration.company_id)
+    .eq('meta_data->>facebook_psid', senderId)
+    .single();
+
+  if (!customer) {
+    const { data: newCust, error: custErr } = await supabase
+      .from('customers')
+      .insert({
+        company_id: integration.company_id,
+        name: 'Facebook User',
+        meta_data: { facebook_psid: senderId }
+      })
+      .select()
+      .single();
+    
+    if (custErr) {
+      console.error('Error creating customer:', custErr);
+      return;
+    }
+    customer = newCust;
+  }
+
+  // 3. Find or create a conversation
   let { data: conversation } = await supabase
     .from('conversations')
     .select('*')
     .eq('company_id', integration.company_id)
-    .eq('customer_identifier', senderId)
+    .eq('platform_conversation_id', senderId)
     .single();
 
   if (!conversation) {
-    const { data: newConv } = await supabase
+    const { data: newConv, error: convErr } = await supabase
       .from('conversations')
       .insert({
         company_id: integration.company_id,
-        platform: 'facebook',
-        customer_name: 'Facebook User', // Ideally fetch from graph API
-        customer_identifier: senderId,
+        integration_id: integration.id,
+        customer_id: customer.id,
+        platform_conversation_id: senderId,
+        last_message: text,
+        last_message_at: new Date().toISOString(),
+        unread_count: 1,
         status: 'open'
       })
       .select()
       .single();
+    
+    if (convErr) {
+      console.error('Error creating conversation:', convErr);
+      return;
+    }
     conversation = newConv;
+  } else {
+    // Update existing conversation
+    await supabase
+      .from('conversations')
+      .update({
+        last_message: text,
+        last_message_at: new Date().toISOString(),
+        unread_count: (conversation.unread_count || 0) + 1
+      })
+      .eq('id', conversation.id);
   }
 
   if (conversation) {
-    // 3. Save the message
-    await supabase.from('messages').insert({
+    // 4. Save the message
+    const { error: msgErr } = await supabase.from('messages').insert({
       conversation_id: conversation.id,
+      company_id: integration.company_id,
       sender_type: 'customer',
+      message_type: 'text',
       content: text,
       metadata: { page_id: pageId, sender_id: senderId }
     });
+    if (msgErr) {
+      console.error('Error creating message:', msgErr);
+    }
   }
 }
 

@@ -51,6 +51,7 @@ export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [fbConnecting, setFbConnecting] = useState(false);
+  const [igConnecting, setIgConnecting] = useState(false);
   const { profile } = useAuthStore();
 
   // Modal & Form States
@@ -195,7 +196,7 @@ export default function IntegrationsPage() {
       return;
     }
 
-    setFbConnecting(true);
+    setIgConnecting(true);
 
     window.FB.login((response: any) => {
       if (response.authResponse) {
@@ -229,11 +230,11 @@ export default function IntegrationsPage() {
           showToast('An error occurred while linking Instagram.', 'error');
         })
         .finally(() => {
-          setFbConnecting(false);
+          setIgConnecting(false);
         });
 
       } else {
-        setFbConnecting(false);
+        setIgConnecting(false);
       }
     }, {
       scope: 'pages_show_list,pages_messaging,pages_read_engagement,instagram_basic,instagram_manage_messages,leads_retrieval'
@@ -571,7 +572,7 @@ export default function IntegrationsPage() {
                 <div className="space-y-4">
                   <button 
                     onClick={() => handleConnectFacebook()}
-                    disabled={fbConnecting}
+                    disabled={fbConnecting || igConnecting}
                     className="w-full flex items-center justify-between p-4 border border-zinc-200 rounded-xl hover:border-zinc-300 hover:bg-zinc-50 transition-all text-left group active:scale-[0.99] duration-200"
                   >
                     <div className="flex items-center gap-4">
@@ -588,7 +589,7 @@ export default function IntegrationsPage() {
 
                   <button 
                     onClick={() => handleConnectInstagram()}
-                    disabled={fbConnecting}
+                    disabled={fbConnecting || igConnecting}
                     className="w-full flex items-center justify-between p-4 border border-zinc-200 rounded-xl hover:border-zinc-300 hover:bg-zinc-50 transition-all text-left group active:scale-[0.99] duration-200"
                   >
                     <div className="flex items-center gap-4">
@@ -600,7 +601,7 @@ export default function IntegrationsPage() {
                         <p className="text-xs text-zinc-500 mt-0.5">Manage DMs, story replies, and comment flows</p>
                       </div>
                     </div>
-                    {fbConnecting ? <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" /> : <Plus className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600" />}
+                    {igConnecting ? <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" /> : <Plus className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600" />}
                   </button>
 
                   <button 
