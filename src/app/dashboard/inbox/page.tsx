@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useInboxStore, Conversation, Message } from '@/store/inboxStore';
+import { useAuthStore } from '@/store/authStore';
 import { 
   MessageCircle, 
   Search, 
@@ -24,6 +25,7 @@ import {
 
 
 export default function InboxPage() {
+  const { profile } = useAuthStore();
   const {
     conversations,
     selectedConversationId,
@@ -35,7 +37,9 @@ export default function InboxPage() {
     sendMessage,
     toggleAiMode,
     updateDeliveryStatus,
-    loadMockData
+    fetchConversations,
+    subscribeToRealtime,
+    loading
   } = useInboxStore();
 
   const [inputVal, setInputVal] = useState('');
@@ -46,8 +50,12 @@ export default function InboxPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadMockData();
-  }, [loadMockData]);
+    if (profile?.company_id) {
+      fetchConversations(profile.company_id);
+      const unsubscribe = subscribeToRealtime(profile.company_id);
+      return () => unsubscribe();
+    }
+  }, [profile?.company_id, fetchConversations, subscribeToRealtime]);
 
   const selectedConv = conversations.find(c => c.id === selectedConversationId);
 
@@ -65,8 +73,8 @@ export default function InboxPage() {
   });
 
   const handleSend = () => {
-    if (!inputVal.trim() || !selectedConversationId) return;
-    sendMessage(selectedConversationId, inputVal, 'agent');
+    if (!inputVal.trim() || !selectedConversationId || !profile?.company_id) return;
+    sendMessage(selectedConversationId, inputVal, profile.company_id, 'agent');
     setInputVal('');
   };
 
@@ -160,8 +168,16 @@ export default function InboxPage() {
         </div>
 
         {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-zinc-100">
-          {filteredConversations.length === 0 ? (
+        <div className="flex-1 overflow-y-auto divide-y divide-zinc-100 flex flex-col">
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center p-6 text-zinc-400 text-xs">
+              <svg className="animate-spin h-5 w-5 mr-2 text-zinc-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Loading conversations...
+            </div>
+          ) : filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-zinc-400 text-xs">No conversations found.</div>
           ) : (
             filteredConversations.map((conv) => (
@@ -385,7 +401,7 @@ export default function InboxPage() {
             <div className="space-y-6 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-100">
               
               {/* Step 1 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { setActiveStep(1); updateDeliveryStatus(selectedConv.id, 'Confirmed (Placed)'); }}>
+              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(1); updateDeliveryStatus(selectedConv.id, 'Confirmed (Placed)', profile.company_id); } }}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
                   activeStep >= 1 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
                 }`}>
@@ -398,7 +414,7 @@ export default function InboxPage() {
               </div>
 
               {/* Step 2 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { setActiveStep(2); updateDeliveryStatus(selectedConv.id, 'Dispatched'); }}>
+              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(2); updateDeliveryStatus(selectedConv.id, 'Dispatched', profile.company_id); } }}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
                   activeStep >= 2 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
                 }`}>
@@ -411,7 +427,7 @@ export default function InboxPage() {
               </div>
 
               {/* Step 3 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { setActiveStep(3); updateDeliveryStatus(selectedConv.id, 'In Transit'); }}>
+              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(3); updateDeliveryStatus(selectedConv.id, 'In Transit', profile.company_id); } }}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
                   activeStep >= 3 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
                 }`}>
@@ -424,7 +440,7 @@ export default function InboxPage() {
               </div>
 
               {/* Step 4 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { setActiveStep(4); updateDeliveryStatus(selectedConv.id, 'Delivered'); }}>
+              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(4); updateDeliveryStatus(selectedConv.id, 'Delivered', profile.company_id); } }}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
                   activeStep >= 4 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
                 }`}>

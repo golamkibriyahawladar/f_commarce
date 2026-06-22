@@ -34,68 +34,13 @@ interface InboxState {
   setSelectedConversationId: (id: string | null) => void;
   setFilterPlatform: (platform: 'all' | 'facebook' | 'instagram' | 'whatsapp') => void;
   setFilterStatus: (status: 'open' | 'snoozed' | 'closed') => void;
-  sendMessage: (conversationId: string, content: string, senderType?: 'agent' | 'ai') => void;
-  toggleAiMode: (conversationId: string) => void;
-  updateDeliveryStatus: (conversationId: string, status: string) => void;
+  fetchConversations: (companyId: string) => Promise<void>;
+  subscribeToRealtime: (companyId: string) => () => void;
+  sendMessage: (conversationId: string, content: string, companyId: string, senderType?: 'agent' | 'ai') => Promise<void>;
+  toggleAiMode: (conversationId: string) => Promise<void>;
+  updateDeliveryStatus: (conversationId: string, status: string, companyId: string) => Promise<void>;
   loadMockData: () => void;
 }
-
-const mockConversations: Conversation[] = [
-  {
-    id: 'conv-1',
-    platform: 'facebook',
-    customer_name: 'Imran Khan',
-    customer_phone: '01712345678',
-    customer_email: 'imran@gmail.com',
-    customer_address: 'House 42, Road 11, Banani, Dhaka',
-    last_message: 'Do you have this in blue color?',
-    last_message_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    unread_count: 2,
-    status: 'open',
-    is_ai_mode: false,
-    messages: [
-      { id: 'm-1', conversation_id: 'conv-1', sender_type: 'customer', message_type: 'text', content: 'Hello, I saw your product on page.', created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
-      { id: 'm-2', conversation_id: 'conv-1', sender_type: 'agent', message_type: 'text', content: 'Hi Imran! Which product are you interested in?', created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
-      { id: 'm-3', conversation_id: 'conv-1', sender_type: 'customer', message_type: 'text', content: 'Do you have this in blue color?', created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
-    ]
-  },
-  {
-    id: 'conv-2',
-    platform: 'whatsapp',
-    customer_name: 'Sumaiya Rahman',
-    customer_phone: '01987654321',
-    customer_email: 'sumaiya@gmail.com',
-    customer_address: 'Sector 4, Uttara, Dhaka',
-    last_message: 'Please confirm my order.',
-    last_message_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    unread_count: 0,
-    status: 'open',
-    is_ai_mode: true,
-    messages: [
-      { id: 'm-4', conversation_id: 'conv-2', sender_type: 'customer', message_type: 'text', content: 'Can I order via WhatsApp?', created_at: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
-      { id: 'm-5', conversation_id: 'conv-2', sender_type: 'ai', message_type: 'text', content: 'Yes, absolutely! Please provide your name, phone number, and address.', created_at: new Date(Date.now() - 38 * 60 * 1000).toISOString() },
-      { id: 'm-6', conversation_id: 'conv-2', sender_type: 'customer', message_type: 'text', content: 'Sumaiya, 01987654321, Sector 4, Uttara. Please confirm my order.', created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-    ]
-  },
-  {
-    id: 'conv-3',
-    platform: 'instagram',
-    customer_name: 'Rakib Hasan',
-    customer_phone: '01511223344',
-    customer_email: 'rakib@gmail.com',
-    customer_address: 'Agrabad, Chittagong',
-    last_message: 'Thanks for the quick reply.',
-    last_message_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    unread_count: 0,
-    status: 'closed',
-    is_ai_mode: false,
-    messages: [
-      { id: 'm-7', conversation_id: 'conv-3', sender_type: 'customer', message_type: 'text', content: 'What is the price?', created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
-      { id: 'm-8', conversation_id: 'conv-3', sender_type: 'agent', message_type: 'text', content: 'The price is 1,200 BDT.', created_at: new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString() },
-      { id: 'm-9', conversation_id: 'conv-3', sender_type: 'customer', message_type: 'text', content: 'Thanks for the quick reply.', created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-    ]
-  }
-];
 
 export const useInboxStore = create<InboxState>((set, get) => ({
   conversations: [],
@@ -110,69 +55,286 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   
   setFilterStatus: (status) => set({ filterStatus: status }),
 
-  sendMessage: (conversationId, content, senderType = 'agent') => {
-    set((state) => {
-      const updatedConversations = state.conversations.map((conv) => {
-        if (conv.id === conversationId) {
-          const newMsg: Message = {
-            id: `msg-${Date.now()}`,
-            conversation_id: conversationId,
-            sender_type: senderType,
-            message_type: 'text',
-            content,
-            created_at: new Date().toISOString(),
-          };
+  fetchConversations: async (companyId) => {
+    set({ loading: true });
+    try {
+      // 1. Fetch conversations with joined customers details
+      const { data: convs, error: convErr } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          customer:customers(*)
+        `)
+        .eq('company_id', companyId)
+        .order('last_message_at', { ascending: false });
+
+      if (convErr) throw convErr;
+
+      // 2. Fetch messages for each conversation
+      const conversationsWithMessages = await Promise.all(
+        (convs || []).map(async (conv: any) => {
+          const { data: msgs, error: msgErr } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', conv.id)
+            .order('created_at', { ascending: true });
+
+          if (msgErr) throw msgErr;
+
           return {
-            ...conv,
-            last_message: content,
-            last_message_at: newMsg.created_at,
-            messages: [...conv.messages, newMsg],
+            id: conv.id,
+            platform: conv.platform || 'facebook',
+            customer_name: conv.customer?.name || 'Facebook User',
+            customer_phone: conv.customer?.phone || '',
+            customer_email: conv.customer?.email || '',
+            customer_address: conv.customer?.shipping_address?.address || '',
+            last_message: conv.last_message || '',
+            last_message_at: conv.last_message_at || conv.created_at,
+            unread_count: conv.unread_count || 0,
+            status: conv.status || 'open',
+            is_ai_mode: conv.is_ai_mode || false,
+            messages: msgs || []
           };
-        }
-        return conv;
+        })
+      );
+
+      // Select first conversation if none selected
+      const currentSelected = get().selectedConversationId;
+      const nextSelected = conversationsWithMessages.length > 0 
+        ? (conversationsWithMessages.some(c => c.id === currentSelected) ? currentSelected : conversationsWithMessages[0].id)
+        : null;
+
+      set({ 
+        conversations: conversationsWithMessages, 
+        selectedConversationId: nextSelected, 
+        loading: false 
       });
-      return { conversations: updatedConversations };
-    });
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
+      set({ loading: false });
+    }
   },
 
-  toggleAiMode: (conversationId) => {
-    set((state) => ({
-      conversations: state.conversations.map((conv) => 
-        conv.id === conversationId ? { ...conv, is_ai_mode: !conv.is_ai_mode } : conv
-      )
-    }));
-  },
+  subscribeToRealtime: (companyId) => {
+    const supabaseClient = supabase;
 
-  updateDeliveryStatus: (conversationId, status) => {
-    // Optional placeholder metadata update
-    set((state) => ({
-      conversations: state.conversations.map((conv) => {
-        if (conv.id === conversationId) {
-          return {
-            ...conv,
-            last_message: `System: Delivery status updated to ${status}`,
-            last_message_at: new Date().toISOString(),
-            messages: [
-              ...conv.messages,
-              {
-                id: `system-${Date.now()}`,
-                conversation_id: conversationId,
-                sender_type: 'system',
-                message_type: 'text',
-                content: `Delivery status updated to: ${status}`,
-                created_at: new Date().toISOString()
+    // Listen for new messages
+    const messageChannel = supabaseClient
+      .channel('messages-db-changes')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `company_id=eq.${companyId}`
+      }, (payload) => {
+        const newMsg = payload.new as Message;
+        
+        set((state) => {
+          const updatedConversations = state.conversations.map((conv) => {
+            if (conv.id === newMsg.conversation_id) {
+              const exists = conv.messages.some(m => m.id === newMsg.id);
+              const messages = exists ? conv.messages : [...conv.messages, newMsg];
+              return {
+                ...conv,
+                last_message: newMsg.content,
+                last_message_at: newMsg.created_at,
+                messages
+              };
+            }
+            return conv;
+          });
+          return { conversations: updatedConversations };
+        });
+      })
+      .subscribe();
+
+    // Listen for updates on conversations (e.g. AI mode, status changes, last_message, unread_count)
+    const convChannel = supabaseClient
+      .channel('conversations-db-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'conversations',
+        filter: `company_id=eq.${companyId}`
+      }, async (payload) => {
+        const updatedConv = payload.new as any;
+        const eventType = payload.eventType;
+
+        if (eventType === 'DELETE') {
+          set((state) => ({
+            conversations: state.conversations.filter(c => c.id !== payload.old.id),
+            selectedConversationId: state.selectedConversationId === payload.old.id ? null : state.selectedConversationId
+          }));
+          return;
+        }
+
+        const conversations = get().conversations;
+        const exists = conversations.some(c => c.id === updatedConv.id);
+
+        if (exists) {
+          set((state) => ({
+            conversations: state.conversations.map((c) => {
+              if (c.id === updatedConv.id) {
+                return {
+                  ...c,
+                  status: updatedConv.status,
+                  is_ai_mode: updatedConv.is_ai_mode,
+                  unread_count: updatedConv.unread_count,
+                  last_message: updatedConv.last_message,
+                  last_message_at: updatedConv.last_message_at
+                };
               }
-            ]
+              return c;
+            })
+          }));
+        } else {
+          // If a new conversation is created, trigger a refresh to fetch details with joined customer
+          get().fetchConversations(companyId);
+        }
+      })
+      .subscribe();
+
+    // Return cleanup function to unsubscribe
+    return () => {
+      supabaseClient.removeChannel(messageChannel);
+      supabaseClient.removeChannel(convChannel);
+    };
+  },
+
+  sendMessage: async (conversationId, content, companyId, senderType = 'agent') => {
+    // 1. Optimistic UI update (optional, but good for UX)
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg: Message = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_type: senderType,
+      message_type: 'text',
+      content,
+      created_at: new Date().toISOString()
+    };
+
+    set((state) => ({
+      conversations: state.conversations.map((c) => {
+        if (c.id === conversationId) {
+          return {
+            ...c,
+            last_message: content,
+            last_message_at: tempMsg.created_at,
+            messages: [...c.messages, tempMsg]
           };
         }
-        return conv;
+        return c;
       })
     }));
+
+    try {
+      // 2. Call the server route to route outbound messaging API
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId, content, companyId })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to send message');
+      }
+
+      const data = await res.json();
+      
+      // 3. Replace the temp message with the actual saved message
+      set((state) => ({
+        conversations: state.conversations.map((c) => {
+          if (c.id === conversationId) {
+            return {
+              ...c,
+              messages: c.messages.map(m => m.id === tempId ? data.message : m)
+            };
+          }
+          return c;
+        })
+      }));
+    } catch (err) {
+      console.error('Error sending message:', err);
+      // Remove the temp message if sending failed
+      set((state) => ({
+        conversations: state.conversations.map((c) => {
+          if (c.id === conversationId) {
+            return {
+              ...c,
+              messages: c.messages.filter(m => m.id !== tempId)
+            };
+          }
+          return c;
+        })
+      }));
+    }
+  },
+
+  toggleAiMode: async (conversationId) => {
+    const conversations = get().conversations;
+    const conv = conversations.find(c => c.id === conversationId);
+    if (!conv) return;
+
+    const newVal = !conv.is_ai_mode;
+
+    // Optimistic Update
+    set((state) => ({
+      conversations: state.conversations.map((c) => 
+        c.id === conversationId ? { ...c, is_ai_mode: newVal } : c
+      )
+    }));
+
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ is_ai_mode: newVal })
+        .eq('id', conversationId);
+      
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error toggling AI mode:', err);
+      // Revert state
+      set((state) => ({
+        conversations: state.conversations.map((c) => 
+          c.id === conversationId ? { ...c, is_ai_mode: conv.is_ai_mode } : c
+        )
+      }));
+    }
+  },
+
+  updateDeliveryStatus: async (conversationId, status, companyId) => {
+    const content = `Delivery status updated to: ${status}`;
+    try {
+      const { data: newMsg, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          company_id: companyId,
+          sender_type: 'system',
+          message_type: 'text',
+          content,
+          metadata: { delivery_status: status }
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: `System: ${content}`,
+          last_message_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+    } catch (err) {
+      console.error('Error updating delivery status:', err);
+    }
   },
 
   loadMockData: () => {
-    if (get().conversations.length === 0) {
-      set({ conversations: mockConversations, selectedConversationId: 'conv-1' });
-    }
+    // Keep it as a no-op fallback so we don't break code imports
   }
 }));
