@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Facebook, 
   Instagram, 
@@ -9,6 +9,8 @@ import {
   Plus,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
+  Info,
   Settings2,
   RefreshCw,
   ExternalLink,
@@ -70,6 +72,25 @@ export default function IntegrationsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showSecretId, setShowSecretId] = useState<string | null>(null);
 
+  // Toast Notification System
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; visible: boolean }>({ message: '', type: 'info', visible: false });
+  const toastTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, type, visible: true });
+    toastTimer.current = setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }));
+    }, 4000);
+  }, []);
+
+  // Confirm Dialog System
+  const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; title: string; message: string; onConfirm: () => void }>({ visible: false, title: '', message: '', onConfirm: () => {} });
+
+  const showConfirm = useCallback((title: string, message: string, onConfirm: () => void) => {
+    setConfirmDialog({ visible: true, title, message, onConfirm });
+  }, []);
+
   // Fetch all active integrations
   const fetchIntegrations = async () => {
     if (!profile?.company_id) return;
@@ -118,7 +139,7 @@ export default function IntegrationsPage() {
 
   const handleConnectFacebook = () => {
     if (!window.FB) {
-      alert("Facebook SDK not loaded yet.");
+      showToast('Facebook SDK not loaded yet. Please wait a moment and try again.', 'warning');
       return;
     }
 
@@ -142,16 +163,16 @@ export default function IntegrationsPage() {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert(`Successfully connected ${data.pagesSaved} pages!`);
+            showToast(`Successfully connected ${data.pagesSaved} page(s)!`, 'success');
             fetchIntegrations();
             closeModal();
           } else {
-            alert("Error saving pages: " + data.error);
+            showToast(data.error || 'Failed to save pages.', 'error');
           }
         })
         .catch(err => {
           console.error("Fetch error", err);
-          alert("An error occurred while linking Facebook.");
+          showToast('An error occurred while linking Facebook.', 'error');
         })
         .finally(() => {
           setFbConnecting(false);
@@ -168,7 +189,7 @@ export default function IntegrationsPage() {
 
   const handleConnectInstagram = () => {
     if (!window.FB) {
-      alert("Facebook SDK not loaded yet.");
+      showToast('Facebook SDK not loaded yet. Please wait a moment and try again.', 'warning');
       return;
     }
 
@@ -194,16 +215,16 @@ export default function IntegrationsPage() {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert(`Successfully linked Meta accounts!`);
+            showToast('Successfully linked Meta accounts!', 'success');
             fetchIntegrations();
             closeModal();
           } else {
-            alert("Error saving pages: " + data.error);
+            showToast(data.error || 'Failed to save pages.', 'error');
           }
         })
         .catch(err => {
           console.error("Fetch error", err);
-          alert("An error occurred while linking Instagram.");
+          showToast('An error occurred while linking Instagram.', 'error');
         })
         .finally(() => {
           setFbConnecting(false);
@@ -220,7 +241,7 @@ export default function IntegrationsPage() {
   const handleConnectWhatsApp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!whatsappPhoneId || !whatsappAccountId || !whatsappToken) {
-      alert('Please fill out all fields.');
+      showToast('Please fill out all fields.', 'warning');
       return;
     }
 
@@ -242,12 +263,12 @@ export default function IntegrationsPage() {
 
       if (error) throw error;
       
-      alert('WhatsApp Business account connected successfully!');
+      showToast('WhatsApp Business account connected successfully!', 'success');
       fetchIntegrations();
       closeModal();
     } catch (err: any) {
       console.error(err);
-      alert('Failed to connect WhatsApp: ' + err.message);
+      showToast('Failed to connect WhatsApp: ' + err.message, 'error');
     } finally {
       setSubmittingWhatsapp(false);
     }
@@ -256,7 +277,7 @@ export default function IntegrationsPage() {
   const handleConnectWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!webhookName) {
-      alert('Please enter a webhook name.');
+      showToast('Please enter a webhook name.', 'warning');
       return;
     }
 
@@ -298,27 +319,32 @@ export default function IntegrationsPage() {
       }
     } catch (err: any) {
       console.error(err);
-      alert('Failed to create Webhook: ' + err.message);
+      showToast('Failed to create Webhook: ' + err.message, 'error');
     } finally {
       setSubmittingWebhook(false);
     }
   };
 
-  const handleDisconnect = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to disconnect ${name}?`)) return;
+  const handleDisconnect = (id: string, name: string) => {
+    showConfirm(
+      'Disconnect Integration',
+      `Are you sure you want to disconnect "${name}"? This action cannot be undone.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('integrations')
+            .delete()
+            .eq('id', id);
 
-    try {
-      const { error } = await supabase
-        .from('integrations')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      setIntegrations(integrations.filter(item => item.id !== id));
-    } catch (err: any) {
-      console.error(err);
-      alert('Failed to disconnect integration.');
-    }
+          if (error) throw error;
+          setIntegrations(prev => prev.filter(item => item.id !== id));
+          showToast(`"${name}" disconnected successfully.`, 'success');
+        } catch (err: any) {
+          console.error(err);
+          showToast('Failed to disconnect integration.', 'error');
+        }
+      }
+    );
   };
 
   const closeModal = () => {
@@ -746,6 +772,78 @@ export default function IntegrationsPage() {
                   </form>
                 )
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      <div 
+        className={`fixed bottom-6 right-6 z-[100] max-w-md transition-all duration-500 ease-out ${
+          toast.visible 
+            ? 'translate-y-0 opacity-100 scale-100' 
+            : 'translate-y-4 opacity-0 scale-95 pointer-events-none'
+        }`}
+      >
+        <div className={`flex items-start gap-3 px-5 py-4 rounded-2xl border shadow-2xl backdrop-blur-md ${
+          toast.type === 'success' ? 'bg-emerald-950/90 border-emerald-700/50 text-emerald-50' :
+          toast.type === 'error' ? 'bg-red-950/90 border-red-700/50 text-red-50' :
+          toast.type === 'warning' ? 'bg-amber-950/90 border-amber-700/50 text-amber-50' :
+          'bg-zinc-900/90 border-zinc-700/50 text-zinc-50'
+        }`}>
+          <div className={`p-1 rounded-full shrink-0 mt-0.5 ${
+            toast.type === 'success' ? 'bg-emerald-500/20' :
+            toast.type === 'error' ? 'bg-red-500/20' :
+            toast.type === 'warning' ? 'bg-amber-500/20' :
+            'bg-zinc-500/20'
+          }`}>
+            {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
+            {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400" />}
+            {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
+            {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400" />}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold leading-relaxed">{toast.message}</p>
+          </div>
+          <button 
+            onClick={() => setToast(prev => ({ ...prev, visible: false }))}
+            className="shrink-0 p-0.5 rounded-md hover:bg-white/10 transition-colors"
+          >
+            <X className="w-4 h-4 opacity-60" />
+          </button>
+        </div>
+      </div>
+
+      {/* Confirm Dialog */}
+      {confirmDialog.visible && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 bg-red-50 rounded-xl border border-red-100">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <h3 className="text-lg font-bold text-zinc-900">{confirmDialog.title}</h3>
+              </div>
+              <p className="text-sm text-zinc-600 leading-relaxed">{confirmDialog.message}</p>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button 
+                onClick={() => setConfirmDialog(prev => ({ ...prev, visible: false }))}
+                className="flex-1 py-2.5 px-4 border border-zinc-300 text-sm font-semibold text-zinc-700 rounded-xl hover:bg-zinc-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(prev => ({ ...prev, visible: false }));
+                }}
+                className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-sm font-semibold text-white rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Disconnect
+              </button>
             </div>
           </div>
         </div>
