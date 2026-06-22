@@ -32,11 +32,12 @@ export async function POST(req: Request) {
     // and save them to the integrations table
     const pages = data.data || [];
     const savedIntegrations = [];
+    const errors: string[] = [];
 
     for (const page of pages) {
       try {
         // Subscribe to webhooks
-        await fetch(`https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`, {
+        const subRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -44,6 +45,11 @@ export async function POST(req: Request) {
             access_token: page.access_token,
           }),
         });
+
+        if (!subRes.ok) {
+          const subErr = await subRes.json();
+          console.warn(`Webhook subscription warning for page ${page.name}:`, subErr);
+        }
 
         // Check if this integration already exists
         const { data: existingInt } = await supabase
@@ -92,12 +98,28 @@ export async function POST(req: Request) {
 
         if (error) {
           console.error(`Failed to save integration for page ${page.name}:`, error);
+          errors.push(`${page.name}: ${error.message}`);
         } else {
           savedIntegrations.push(integration);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Error processing page ${page.id}:`, err);
+        errors.push(`${page.id}: ${err.message || err}`);
       }
+    }
+
+    if (pages.length === 0) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No Facebook Pages found. Make sure you have created at least one Facebook Page on your profile and selected it during the login popup.'
+      }, { status: 200 }); // Keep status 200 so the frontend alert handles it nicely
+    }
+
+    if (savedIntegrations.length === 0 && errors.length > 0) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Database Error: ' + errors.join('; ')
+      }, { status: 200 });
     }
 
     return NextResponse.json({ 
@@ -109,6 +131,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('FB Pages API Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 200 });
   }
 }
