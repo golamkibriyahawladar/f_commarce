@@ -78,7 +78,7 @@ async function handleIncomingMessage(pageId: string, senderId: string, text: str
   const { data: integration } = await supabase
     .from('integrations')
     .select('company_id')
-    .eq('page_id', pageId)
+    .eq('credentials->>page_id', pageId)
     .single();
 
   if (!integration) return;

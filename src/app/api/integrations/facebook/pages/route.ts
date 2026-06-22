@@ -45,21 +45,50 @@ export async function POST(req: Request) {
           }),
         });
 
-        // Upsert into Supabase integrations table
-        const { data: integration, error } = await supabase
+        // Check if this integration already exists
+        const { data: existingInt } = await supabase
           .from('integrations')
-          .upsert({
-            company_id: companyId,
-            platform: 'facebook',
-            page_id: page.id,
-            page_name: page.name,
-            access_token: page.access_token, // Store the page access token
-            status: 'active'
-          }, {
-            onConflict: 'page_id' // Assuming page_id is unique
-          })
-          .select()
-          .single();
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('provider', 'facebook')
+          .eq('credentials->>page_id', page.id)
+          .maybeSingle();
+
+        let resDb;
+        if (existingInt) {
+          resDb = await supabase
+            .from('integrations')
+            .update({
+              credentials: {
+                page_id: page.id,
+                page_name: page.name,
+                access_token: page.access_token
+              },
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingInt.id)
+            .select()
+            .single();
+        } else {
+          resDb = await supabase
+            .from('integrations')
+            .insert({
+              company_id: companyId,
+              provider: 'facebook',
+              type: 'social',
+              credentials: {
+                page_id: page.id,
+                page_name: page.name,
+                access_token: page.access_token
+              },
+              status: 'active'
+            })
+            .select()
+            .single();
+        }
+
+        const { data: integration, error } = resDb;
 
         if (error) {
           console.error(`Failed to save integration for page ${page.name}:`, error);
