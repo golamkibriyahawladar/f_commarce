@@ -8,8 +8,8 @@ import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('golamkibriya@gmail.com');
-  const [password, setPassword] = useState('123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const { user, initialize } = useAuthStore();
@@ -29,32 +29,6 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg('');
 
-    // Predefined credential verification logic (mock login bypass)
-    if (email === 'golamkibriya@gmail.com' && password === '123') {
-      // Mock log in state update in Zustand store
-      useAuthStore.setState({
-        user: {
-          id: 'mock-user-id',
-          email: 'golamkibriya@gmail.com',
-          aud: 'authenticated',
-          role: 'authenticated',
-          created_at: new Date().toISOString(),
-          app_metadata: {},
-          user_metadata: { full_name: 'Golam Kibriya' }
-        },
-        profile: {
-          id: 'mock-user-id',
-          email: 'golamkibriya@gmail.com',
-          full_name: 'Golam Kibriya',
-          role: 'owner',
-          company_id: 'mock-company-id'
-        },
-        loading: false
-      });
-      router.push('/dashboard');
-      setLoading(false);
-      return;
-    }
 
     try {
       const { error } = await supabase.auth.signInWithPassword({

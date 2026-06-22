@@ -33,18 +33,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   fetchProfile: async (userId) => {
     try {
-      if (userId === 'mock-user-id') {
-        set({
-          profile: {
-            id: 'mock-user-id',
-            email: 'golamkibriya@gmail.com',
-            full_name: 'Golam Kibriya',
-            role: 'owner',
-            company_id: 'mock-company-id'
-          }
-        });
-        return;
-      }
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -61,10 +49,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     set({ loading: true });
-    if (get().user?.id === 'mock-user-id') {
-      set({ user: null, profile: null, loading: false });
-      return;
-    }
     await supabase.auth.signOut();
     set({ user: null, profile: null, loading: false });
   },
@@ -94,9 +78,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user: currentSession.user });
         await get().fetchProfile(currentSession.user.id);
       } else {
-        if (get().user?.id !== 'mock-user-id') {
-          set({ user: null, profile: null });
-        }
+        set({ user: null, profile: null });
       }
       set({ loading: false });
     });
