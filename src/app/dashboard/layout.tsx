@@ -21,7 +21,8 @@ import {
   Bell,
   FileText,
   Plug,
-  BookOpen
+  BookOpen,
+  UserCheck
 } from 'lucide-react';
 
 
@@ -89,6 +90,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: '/dashboard/leads', icon: <FileText className="w-5 h-5" />, label: 'Meta Leads' },
     { href: '/dashboard/crm', icon: <Users className="w-5 h-5" />, label: 'CRM & Delivery' },
     { href: '/dashboard/integrations', icon: <Plug className="w-5 h-5" />, label: 'Integrations' },
+    { href: '/dashboard/agents', icon: <UserCheck className="w-5 h-5" />, label: 'Agents' },
     { href: '/docs', icon: <BookOpen className="w-5 h-5" />, label: 'Documentation' },
     { href: '/dashboard/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' }
   ];

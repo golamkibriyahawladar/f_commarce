@@ -20,7 +20,8 @@ import {
   Clock,
   ArrowLeft,
   Settings,
-  Share2
+  Share2,
+  Webhook
 } from 'lucide-react';
 
 
@@ -96,6 +97,8 @@ export default function InboxPage() {
         );
       case 'whatsapp':
         return <MessageCircle className="w-4 h-4 text-emerald-600" fill="currentColor" />;
+      case 'webhook':
+        return <Webhook className="w-4 h-4 text-indigo-500" />;
       default:
         return null;
     }
@@ -134,7 +137,7 @@ export default function InboxPage() {
           
           {/* Platform Filters */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {['all', 'facebook', 'instagram', 'whatsapp'].map((plat) => (
+            {['all', 'facebook', 'instagram', 'whatsapp', 'webhook'].map((plat) => (
               <button
                 key={plat}
                 onClick={() => setFilterPlatform(plat as any)}

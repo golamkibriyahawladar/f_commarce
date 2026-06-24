@@ -12,7 +12,7 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  platform: 'facebook' | 'instagram' | 'whatsapp';
+  platform: 'facebook' | 'instagram' | 'whatsapp' | 'webhook';
   customer_name: string;
   customer_phone: string;
   customer_email: string;
@@ -29,10 +29,10 @@ interface InboxState {
   conversations: Conversation[];
   selectedConversationId: string | null;
   loading: boolean;
-  filterPlatform: 'all' | 'facebook' | 'instagram' | 'whatsapp';
+  filterPlatform: 'all' | 'facebook' | 'instagram' | 'whatsapp' | 'webhook';
   filterStatus: 'open' | 'snoozed' | 'closed';
   setSelectedConversationId: (id: string | null) => void;
-  setFilterPlatform: (platform: 'all' | 'facebook' | 'instagram' | 'whatsapp') => void;
+  setFilterPlatform: (platform: 'all' | 'facebook' | 'instagram' | 'whatsapp' | 'webhook') => void;
   setFilterStatus: (status: 'open' | 'snoozed' | 'closed') => void;
   fetchConversations: (companyId: string) => Promise<void>;
   subscribeToRealtime: (companyId: string) => () => void;
@@ -58,15 +58,49 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   fetchConversations: async (companyId) => {
     set({ loading: true });
     try {
-      // 1. Fetch conversations with joined customers details
-      const { data: convs, error: convErr } = await supabase
+      // Get current logged-in user profile & assignments
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (profileErr) throw profileErr;
+
+      let assignedIntegrationIds: string[] = [];
+      if (profile.role === 'agent') {
+        const { data: assigns, error: assignsErr } = await supabase
+          .from('profile_assignments')
+          .select('integration_id')
+          .eq('profile_id', user.id);
+        
+        if (assignsErr) throw assignsErr;
+        assignedIntegrationIds = (assigns || []).map(a => a.integration_id);
+      }
+
+      // Fetch conversations with joined customers & integrations details
+      let query = supabase
         .from('conversations')
         .select(`
           *,
-          customer:customers(*)
+          customer:customers(*),
+          integration:integrations(*)
         `)
-        .eq('company_id', companyId)
-        .order('last_message_at', { ascending: false });
+        .eq('company_id', companyId);
+
+      // Apply agent workspace restrictions
+      if (profile.role === 'agent') {
+        if (assignedIntegrationIds.length === 0) {
+          set({ conversations: [], selectedConversationId: null, loading: false });
+          return;
+        }
+        query = query.in('integration_id', assignedIntegrationIds);
+      }
+
+      const { data: convs, error: convErr } = await query.order('last_message_at', { ascending: false });
 
       if (convErr) throw convErr;
 
@@ -83,8 +117,8 @@ export const useInboxStore = create<InboxState>((set, get) => ({
 
           return {
             id: conv.id,
-            platform: conv.platform || 'facebook',
-            customer_name: conv.customer?.name || 'Facebook User',
+            platform: (conv.integration?.provider as any) || 'facebook',
+            customer_name: conv.customer?.name || (conv.integration?.provider === 'webhook' ? 'Webhook User' : 'Social User'),
             customer_phone: conv.customer?.phone || '',
             customer_email: conv.customer?.email || '',
             customer_address: conv.customer?.shipping_address?.address || '',
