@@ -116,79 +116,40 @@ export default function IntegrationsPage() {
     }
   }, [profile?.company_id]);
 
-  // Handle Facebook OAuth callback data from URL params
+  // Handle Facebook OAuth callback result from URL params
   useEffect(() => {
-    const fbPages = searchParams.get('fb_pages');
+    const fbSuccess = searchParams.get('fb_success');
     const fbError = searchParams.get('fb_error');
-    const fbType = searchParams.get('fb_type') || 'facebook';
 
     if (fbError) {
       showToast(decodeURIComponent(fbError), 'error');
-      // Clean URL params
       router.replace('/dashboard/integrations');
       return;
     }
 
-    if (fbPages && profile?.company_id) {
-      // Decode the pages data from base64
-      try {
-        const pagesData = JSON.parse(atob(decodeURIComponent(fbPages)));
-        saveFbPages(pagesData, fbType);
-      } catch (err) {
-        console.error('Error decoding pages data:', err);
-        showToast('Failed to process Facebook page data.', 'error');
-      }
-      // Clean URL params
+    if (fbSuccess) {
+      showToast(`Successfully connected ${fbSuccess} page(s)!`, 'success');
+      fetchIntegrations();
       router.replace('/dashboard/integrations');
     }
-  }, [searchParams, profile?.company_id]);
-
-  // Save Facebook/Instagram pages fetched via OAuth callback
-  const saveFbPages = async (pages: Array<{ id: string; name: string; access_token: string }>, type: string) => {
-    if (!profile?.company_id) return;
-    
-    const isInstagram = type === 'instagram';
-    if (isInstagram) setIgConnecting(true);
-    else setFbConnecting(true);
-
-    try {
-      const res = await fetch('/api/integrations/facebook/pages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accessToken: pages[0]?.access_token, // Pass one token, server re-fetches all pages
-          userId: profile?.id,
-          companyId: profile?.company_id,
-          type: isInstagram ? 'instagram' : 'facebook',
-          pagesFromOAuth: pages // Send pre-fetched pages directly
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`Successfully connected ${data.pagesSaved} page(s)!`, 'success');
-        fetchIntegrations();
-      } else {
-        showToast(data.error || 'Failed to save pages.', 'error');
-      }
-    } catch (err) {
-      console.error('Error saving pages:', err);
-      showToast('An error occurred while saving pages.', 'error');
-    } finally {
-      setFbConnecting(false);
-      setIgConnecting(false);
-    }
-  };
+  }, [searchParams]);
 
   const handleConnectFacebook = () => {
+    if (!profile?.company_id || !profile?.id) {
+      showToast('Please log in first.', 'warning');
+      return;
+    }
     setFbConnecting(true);
-    // Redirect to server-side OAuth initiation
-    window.location.href = '/api/integrations/facebook/connect?type=facebook';
+    window.location.href = `/api/integrations/facebook/connect?type=facebook&companyId=${profile.company_id}&userId=${profile.id}`;
   };
 
   const handleConnectInstagram = () => {
+    if (!profile?.company_id || !profile?.id) {
+      showToast('Please log in first.', 'warning');
+      return;
+    }
     setIgConnecting(true);
-    // Redirect to server-side OAuth initiation with instagram permissions
-    window.location.href = '/api/integrations/facebook/connect?type=instagram';
+    window.location.href = `/api/integrations/facebook/connect?type=instagram&companyId=${profile.company_id}&userId=${profile.id}`;
   };
 
   const handleConnectWhatsApp = async (e: React.FormEvent) => {

@@ -10,7 +10,7 @@ function getSupabase() {
 export async function GET(req: Request) {
   const { searchParams, origin } = new URL(req.url);
   const code = searchParams.get('code');
-  const state = searchParams.get('state') || 'facebook'; // 'facebook' or 'instagram'
+  const stateParam = searchParams.get('state') || '';
   const errorParam = searchParams.get('error');
 
   const safeOrigin = origin.includes('localhost') || origin.includes('127.0.0.1')
@@ -18,12 +18,28 @@ export async function GET(req: Request) {
     : origin.replace('http://', 'https://');
 
   if (errorParam) {
-    // User cancelled or denied
     return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=${encodeURIComponent(errorParam)}`);
   }
 
   if (!code) {
     return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=no_code`);
+  }
+
+  // Decode state to get type, companyId, userId
+  let type = 'facebook';
+  let companyId = '';
+  let userId = '';
+  try {
+    const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf-8'));
+    type = decoded.type || 'facebook';
+    companyId = decoded.companyId || '';
+    userId = decoded.userId || '';
+  } catch {
+    return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=invalid_state`);
+  }
+
+  if (!companyId) {
+    return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=missing_company_id`);
   }
 
   try {
@@ -58,27 +74,92 @@ export async function GET(req: Request) {
     const pages = pagesData.data || [];
 
     if (pages.length === 0) {
-      return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=${encodeURIComponent('No Facebook Pages found. Make sure you have at least one Facebook Page.')}`);
+      return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=${encodeURIComponent('No Facebook Pages found.')}`);
     }
 
-    // 3. Store pages temporarily in a cookie/session or process them directly
-    // We'll encode the pages data into a URL parameter and handle it on the client
-    // For security, we'll save directly to Supabase using the cookie-stored user info
-    // Since this is a server route, we need the user's companyId. We'll pass it via cookie.
+    // 3. Save pages directly to the database (no URL encoding needed!)
+    const supabase = getSupabase();
+    let savedCount = 0;
+    const errors: string[] = [];
 
-    // For simplicity, encode pages info and redirect to client which will call the save API
-    const pagesInfo = pages.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      access_token: p.access_token
-    }));
+    for (const page of pages) {
+      try {
+        // Subscribe to webhooks
+        const subRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}/subscribed_apps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscribed_fields: 'messages,messaging_postbacks,feed,leadgen',
+            access_token: page.access_token,
+          }),
+        });
 
-    // Encode as base64 to pass via URL safely
-    const pagesPayload = Buffer.from(JSON.stringify(pagesInfo)).toString('base64');
+        if (!subRes.ok) {
+          const subErr = await subRes.json();
+          console.warn(`Webhook subscription warning for page ${page.name}:`, subErr);
+        }
 
-    return NextResponse.redirect(
-      `${safeOrigin}/dashboard/integrations?fb_pages=${encodeURIComponent(pagesPayload)}&fb_type=${state}`
-    );
+        // Check if integration already exists
+        const { data: existingInt } = await supabase
+          .from('integrations')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('provider', 'facebook')
+          .eq('credentials->>page_id', page.id)
+          .maybeSingle();
+
+        if (existingInt) {
+          // Update existing
+          const { error } = await supabase
+            .from('integrations')
+            .update({
+              credentials: {
+                page_id: page.id,
+                page_name: page.name,
+                access_token: page.access_token
+              },
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingInt.id);
+
+          if (error) {
+            errors.push(`${page.name}: ${error.message}`);
+          } else {
+            savedCount++;
+          }
+        } else {
+          // Insert new
+          const { error } = await supabase
+            .from('integrations')
+            .insert({
+              company_id: companyId,
+              provider: 'facebook',
+              type: 'social',
+              credentials: {
+                page_id: page.id,
+                page_name: page.name,
+                access_token: page.access_token
+              },
+              status: 'active'
+            });
+
+          if (error) {
+            errors.push(`${page.name}: ${error.message}`);
+          } else {
+            savedCount++;
+          }
+        }
+      } catch (err: any) {
+        errors.push(`${page.id}: ${err.message || err}`);
+      }
+    }
+
+    if (savedCount > 0) {
+      return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_success=${savedCount}`);
+    } else {
+      return NextResponse.redirect(`${safeOrigin}/dashboard/integrations?fb_error=${encodeURIComponent('Failed to save pages: ' + errors.join('; '))}`);
+    }
 
   } catch (err: any) {
     console.error('FB Callback Error:', err);
