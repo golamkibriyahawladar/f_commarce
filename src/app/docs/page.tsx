@@ -236,7 +236,7 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST') {
               }`}
             >
               <Webhook className="w-4 h-4" />
-              Outgoing Webhooks
+              Webhooks Gateway
             </button>
 
             <button 
@@ -338,9 +338,71 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST') {
             {activeTab === 'webhooks' && (
               <div className="bg-white rounded-2xl border border-zinc-200 p-6 sm:p-8 shadow-sm space-y-6">
                 <div>
-                  <h2 className="text-xl font-bold text-zinc-900 mb-2">Outgoing Webhooks</h2>
-                  <p className="text-sm text-zinc-655 leading-relaxed">
-                    Webhooks allow you to receive real-time JSON payloads whenever a message event occurs in your Autozy workspace. Use this to sync chats with external database systems, trigger custom CRM actions, or integrate automated AI bots.
+                  <h2 className="text-xl font-bold text-zinc-900 mb-2">Webhooks Gateway</h2>
+                  <p className="text-sm text-zinc-500 leading-relaxed">
+                    Autozy's Webhooks Gateway supports both **Incoming webhooks** (to push messaging events from external platforms like WooCommerce/Shopify to Autozy) and **Outgoing webhooks** (to trigger alerts on your backend when conversations are updated).
+                  </p>
+                </div>
+
+                {/* 1. Incoming Webhooks */}
+                <div className="space-y-4 pb-6 border-b border-zinc-100">
+                  <h3 className="font-bold text-zinc-900 text-base flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-emerald-600" />
+                    1. Custom Incoming Webhook API
+                  </h3>
+                  <p className="text-xs text-zinc-650 leading-relaxed">
+                    Push messages from external channels (e.g. WooCommerce store, Shopify webhooks, or custom CMS forms) directly into the Autozy Inbox by sending a POST request to your integration URL.
+                  </p>
+
+                  <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="px-2 py-0.5 bg-emerald-600 text-white rounded font-bold">POST</span>
+                      <code className="font-mono text-zinc-800 font-bold text-[11px]">/api/webhooks/custom/[integration_id]</code>
+                    </div>
+                    <p className="text-[10px] text-zinc-400">
+                      Replace <code className="font-mono text-[9px]">[integration_id]</code> with the UUID of your custom Webhook integration (copyable from the Integrations tab).
+                    </p>
+                  </div>
+
+                  <div className="space-y-1 text-xs text-zinc-600">
+                    <h4 className="font-semibold text-zinc-800 text-[11px]">Security Credentials:</h4>
+                    <p className="leading-relaxed">
+                      You must authenticate your request by passing the integration's Verify Token using the header <code className="font-mono bg-zinc-100 text-zinc-800 px-1 py-0.5 rounded text-[10px]">X-Webhook-Verify-Token</code> or query parameter <code className="font-mono bg-zinc-100 text-zinc-800 px-1 py-0.5 rounded text-[10px]">verify_token</code>.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-zinc-800 text-xs">Payload Format (JSON body):</h4>
+                    <div className="bg-zinc-955 rounded-xl p-4 font-mono text-xs text-zinc-300 relative">
+                      <button 
+                        onClick={() => copyToClipboard(JSON.stringify({
+                          sender_psid: "cust_10984",
+                          sender_name: "Tariqul Islam",
+                          message_text: "I want to track my order!"
+                        }, null, 2), 'incoming_webhook_json')}
+                        className="absolute right-3 top-3 bg-white/10 hover:bg-white/20 p-2 rounded-lg text-zinc-300 transition-colors"
+                      >
+                        {copiedId === 'incoming_webhook_json' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                      <pre className="text-[10px] leading-relaxed">
+{`{
+  "sender_psid": "cust_10984",  // Unique customer identifier in your system (e.g. email or phone)
+  "sender_name": "Tariqul Islam", // Customer's full name
+  "message_text": "I want to track my order!" // Message body content
+}`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Outgoing Webhooks */}
+                <div className="space-y-4">
+                  <h3 className="font-bold text-zinc-900 text-base flex items-center gap-2">
+                    <Webhook className="w-4 h-4 text-emerald-600" />
+                    2. Outgoing Webhooks
+                  </h3>
+                  <p className="text-xs text-zinc-650 leading-relaxed">
+                    Autozy immediately dispatches JSON events to your configured server endpoint whenever a message is created or received.
                   </p>
                 </div>
 
