@@ -44,6 +44,7 @@ interface Integration {
 
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const hasWebhook = integrations.some(item => item.provider === 'webhook');
   const [loading, setLoading] = useState(true);
   const [fbConnecting, setFbConnecting] = useState(false);
   const [igConnecting, setIgConnecting] = useState(false);
@@ -195,6 +196,11 @@ export default function IntegrationsPage() {
     e.preventDefault();
     if (!webhookName.trim() || !webhookUrl.trim() || !webhookSecret.trim()) {
       showToast('Please fill out all fields.', 'warning');
+      return;
+    }
+
+    if (!editingIntegrationId && hasWebhook) {
+      showToast('You have already connected a webhook integration. You can only connect one.', 'warning');
       return;
     }
 
@@ -579,19 +585,38 @@ export default function IntegrationsPage() {
                   </button>
 
                   <button 
-                    onClick={() => setSelectedProvider('webhook')}
-                    className="w-full flex items-center justify-between p-4 border border-zinc-200 rounded-xl hover:border-zinc-300 hover:bg-zinc-50 transition-all text-left group active:scale-[0.99] duration-200"
+                    onClick={() => {
+                      if (hasWebhook) {
+                        showToast('You have already connected a webhook integration. You can only add one.', 'warning');
+                        return;
+                      }
+                      setSelectedProvider('webhook');
+                    }}
+                    className={`w-full flex items-center justify-between p-4 border border-zinc-200 rounded-xl transition-all text-left group active:scale-[0.99] duration-200 ${
+                      hasWebhook ? 'opacity-60 cursor-not-allowed bg-zinc-50' : 'hover:border-zinc-300 hover:bg-zinc-50'
+                    }`}
                   >
                     <div className="flex items-center gap-4">
                       <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 group-hover:scale-105 transition-transform">
                         <Webhook className="w-6 h-6 text-indigo-500" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">Custom Webhooks</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">Custom Webhooks</h4>
+                          {hasWebhook && (
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200">
+                              Connected
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-zinc-500 mt-0.5">Receive real-time lead and checkout events</p>
                       </div>
                     </div>
-                    <Plus className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600" />
+                    {hasWebhook ? (
+                      <Check className="w-5 h-5 text-indigo-600" />
+                    ) : (
+                      <Plus className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600" />
+                    )}
                   </button>
                 </div>
               ) : selectedProvider === 'whatsapp' ? (
