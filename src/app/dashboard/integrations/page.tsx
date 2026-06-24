@@ -63,6 +63,9 @@ export default function IntegrationsPage() {
 
   // Webhook Form
   const [webhookName, setWebhookName] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [editingIntegrationId, setEditingIntegrationId] = useState<string | null>(null);
   const [submittingWebhook, setSubmittingWebhook] = useState(false);
   const [createdWebhook, setCreatedWebhook] = useState<{ url: string; secret: string } | null>(null);
 
@@ -190,50 +193,71 @@ export default function IntegrationsPage() {
 
   const handleConnectWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!webhookName) {
-      showToast('Please enter a webhook name.', 'warning');
+    if (!webhookName.trim() || !webhookUrl.trim() || !webhookSecret.trim()) {
+      showToast('Please fill out all fields.', 'warning');
       return;
     }
 
     setSubmittingWebhook(true);
     try {
-      const webhookSecret = 'whsec_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      
-      const { data, error } = await supabase
-        .from('integrations')
-        .insert({
-          company_id: profile?.company_id,
-          provider: 'webhook',
-          type: 'webhook',
-          webhook_secret: webhookSecret,
-          credentials: {
-            name: webhookName.trim()
-          },
-          status: 'active'
+      // Step 1: Perform verification handshake via our server API route
+      const verifyRes = await fetch('/api/integrations/webhook/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: webhookUrl.trim(),
+          token: webhookSecret.trim()
         })
-        .select()
-        .single();
+      });
 
-      if (error) throw error;
+      const verifyData = await verifyRes.json();
 
-      if (data) {
-        const generatedUrl = `${window.location.origin}/api/webhooks/custom/${data.id}`;
-        // Update URL in database
-        await supabase
-          .from('integrations')
-          .update({ webhook_url: generatedUrl })
-          .eq('id', data.id);
-
-        setCreatedWebhook({
-          url: generatedUrl,
-          secret: webhookSecret
-        });
-
-        fetchIntegrations();
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.error || 'Verification failed. Make sure your webhook returns the challenge verbatim.');
       }
+
+      // Step 2: Save to Supabase if verified
+      if (editingIntegrationId) {
+        // Edit mode
+        const { error } = await supabase
+          .from('integrations')
+          .update({
+            webhook_url: webhookUrl.trim(),
+            webhook_secret: webhookSecret.trim(),
+            credentials: {
+              name: webhookName.trim()
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingIntegrationId);
+
+        if (error) throw error;
+        showToast('Webhook updated successfully!', 'success');
+      } else {
+        // Add mode
+        const { error } = await supabase
+          .from('integrations')
+          .insert({
+            company_id: profile?.company_id,
+            provider: 'webhook',
+            type: 'webhook',
+            webhook_url: webhookUrl.trim(),
+            webhook_secret: webhookSecret.trim(),
+            credentials: {
+              name: webhookName.trim()
+            },
+            status: 'active'
+          });
+
+        if (error) throw error;
+        showToast('Webhook connected successfully!', 'success');
+      }
+
+      fetchIntegrations();
+      closeModal();
     } catch (err: any) {
       console.error(err);
-      showToast('Failed to create Webhook: ' + err.message, 'error');
+      showToast(err.message || 'Failed to verify or connect webhook.', 'error');
     } finally {
       setSubmittingWebhook(false);
     }
@@ -262,6 +286,15 @@ export default function IntegrationsPage() {
     );
   };
 
+  const handleEditWebhookClick = (item: Integration) => {
+    setEditingIntegrationId(item.id);
+    setWebhookName(item.credentials?.name || '');
+    setWebhookUrl(item.webhook_url || '');
+    setWebhookSecret(item.webhook_secret || '');
+    setSelectedProvider('webhook');
+    setIsAddModalOpen(true);
+  };
+
   const closeModal = () => {
     setIsAddModalOpen(false);
     setSelectedProvider(null);
@@ -269,6 +302,9 @@ export default function IntegrationsPage() {
     setWhatsappAccountId('');
     setWhatsappToken('');
     setWebhookName('');
+    setWebhookUrl('');
+    setWebhookSecret('');
+    setEditingIntegrationId(null);
     setCreatedWebhook(null);
   };
 
@@ -417,13 +453,24 @@ export default function IntegrationsPage() {
 
                   <div className="flex items-center justify-between pt-5 mt-5 border-t border-zinc-100 text-xs text-zinc-500">
                     <span>Connected: {new Date(item.created_at).toLocaleDateString()}</span>
-                    <button 
-                      onClick={() => handleDisconnect(item.id, title)}
-                      className="flex items-center gap-1.5 text-red-600 hover:text-white hover:bg-red-600 border border-red-100 hover:border-red-600 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Disconnect
-                    </button>
+                    <div className="flex gap-2">
+                      {provider === 'webhook' && (
+                        <button 
+                          onClick={() => handleEditWebhookClick(item)}
+                          className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                        >
+                          <Settings2 className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => handleDisconnect(item.id, title)}
+                        className="flex items-center gap-1.5 text-red-600 hover:text-white hover:bg-red-600 border border-red-100 hover:border-red-600 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Disconnect
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -462,10 +509,10 @@ export default function IntegrationsPage() {
             <div className="flex justify-between items-center p-5 border-b border-zinc-150">
               <div>
                 <h3 className="text-lg font-bold text-zinc-900">
-                  {selectedProvider ? `Connect ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}` : 'Add Integration'}
+                  {editingIntegrationId ? 'Edit Webhook Integration' : (selectedProvider ? `Connect ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}` : 'Add Integration')}
                 </h3>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  {selectedProvider ? 'Enter credentials to link your channel' : 'Select a service provider to continue'}
+                  {editingIntegrationId ? 'Update your custom webhook settings' : (selectedProvider ? 'Enter credentials to link your channel' : 'Select a service provider to continue')}
                 </p>
               </div>
               <button 
@@ -605,87 +652,71 @@ export default function IntegrationsPage() {
                   </div>
                 </form>
               ) : selectedProvider === 'webhook' ? (
-                // Webhook Setup Page
-                createdWebhook ? (
-                  // Show Generated Webhook URL & Secret
-                  <div className="space-y-5">
-                    <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex gap-3 items-start">
-                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="font-bold text-emerald-950 text-sm">Webhook Generated Successfully!</h4>
-                        <p className="text-xs text-emerald-800/80 mt-0.5">Please copy this information and paste it in your external platform (WordPress, Shopify, etc.).</p>
-                      </div>
-                    </div>
+                // Outgoing Webhook Setup Form
+                <form onSubmit={handleConnectWebhook} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Webhook Name:</label>
+                    <input 
+                      type="text" 
+                      required 
+                      className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="e.g. WooCommerce Store, My CRM App"
+                      value={webhookName}
+                      onChange={(e) => setWebhookName(e.target.value)}
+                    />
+                  </div>
 
-                    <div className="space-y-3.5 text-xs text-zinc-700">
-                      <div>
-                        <span className="block font-bold text-zinc-500 uppercase tracking-wide text-[9px] mb-1.5">Payload Webhook URL:</span>
-                        <div className="flex items-center gap-2 bg-zinc-50 px-3 py-2 rounded-lg border border-zinc-200">
-                          <span className="font-mono truncate select-all flex-1">{createdWebhook.url}</span>
-                          <button 
-                            onClick={() => copyToClipboard(createdWebhook.url, 'created_url')}
-                            className="text-zinc-400 hover:text-zinc-650 transition-colors"
-                          >
-                            {copiedId === 'created_url' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Webhook Endpoint URL:</label>
+                    <input 
+                      type="url" 
+                      required 
+                      className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 font-mono"
+                      placeholder="https://yourdomain.com/webhook"
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                    />
+                  </div>
 
-                      <div>
-                        <span className="block font-bold text-zinc-500 uppercase tracking-wide text-[9px] mb-1.5">Secret Key (for payload signature verification):</span>
-                        <div className="flex items-center gap-2 bg-zinc-50 px-3 py-2 rounded-lg border border-zinc-200">
-                          <span className="font-mono truncate select-all flex-1">{createdWebhook.secret}</span>
-                          <button 
-                            onClick={() => copyToClipboard(createdWebhook.secret, 'created_secret')}
-                            className="text-zinc-400 hover:text-zinc-650 transition-colors"
-                          >
-                            {copiedId === 'created_secret' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Verify Token:</label>
+                    <input 
+                      type="text" 
+                      required 
+                      className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 font-mono"
+                      placeholder="e.g. my_secret_token_123"
+                      value={webhookSecret}
+                      onChange={(e) => setWebhookSecret(e.target.value)}
+                    />
+                    <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">
+                      Used for verification challenge handshake (`hub.verify_token`). Autozy will send a random string which your server must echo verbatim to verify ownership.
+                    </p>
+                  </div>
 
+                  <div className="flex gap-3 pt-4">
                     <button 
-                      onClick={closeModal}
-                      className="w-full py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors"
+                      type="button" 
+                      onClick={() => {
+                        if (editingIntegrationId) {
+                          closeModal();
+                        } else {
+                          setSelectedProvider(null);
+                        }
+                      }}
+                      className="flex-1 py-2 px-4 border border-zinc-300 text-sm font-semibold text-zinc-700 rounded-lg hover:bg-zinc-50 transition-colors"
                     >
-                      Done
+                      {editingIntegrationId ? 'Cancel' : 'Back'}
+                    </button>
+                    <button 
+                      type="submit" 
+                      disabled={submittingWebhook}
+                      className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      {submittingWebhook && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {submittingWebhook ? 'Verifying...' : (editingIntegrationId ? 'Save Changes' : 'Connect Webhook')}
                     </button>
                   </div>
-                ) : (
-                  // Show Webhook Setup Form
-                  <form onSubmit={handleConnectWebhook} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Webhook Source Name:</label>
-                      <input 
-                        type="text" 
-                        required 
-                        className="w-full px-3 py-2 border border-zinc-300 rounded-lg text-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-                        placeholder="e.g. WooCommerce Store, Lead Website"
-                        value={webhookName}
-                        onChange={(e) => setWebhookName(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="flex gap-3 pt-4">
-                      <button 
-                        type="button" 
-                        onClick={() => setSelectedProvider(null)}
-                        className="flex-1 py-2 px-4 border border-zinc-300 text-sm font-semibold text-zinc-700 rounded-lg hover:bg-zinc-50 transition-colors"
-                      >
-                        Back
-                      </button>
-                      <button 
-                        type="submit" 
-                        disabled={submittingWebhook}
-                        className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold text-white rounded-lg transition-colors flex items-center justify-center gap-2"
-                      >
-                        {submittingWebhook && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {submittingWebhook ? 'Generating...' : 'Generate Webhook'}
-                      </button>
-                    </div>
-                  </form>
-                )
+                </form>
               ) : null}
             </div>
           </div>

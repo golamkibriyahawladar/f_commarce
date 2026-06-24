@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { triggerCompanyWebhooks } from '@/lib/webhookDispatcher';
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'autozy_secure_token';
 
@@ -155,16 +156,24 @@ async function handleIncomingMessage(pageId: string, senderId: string, text: str
 
   if (conversation) {
     // 4. Save the message
-    const { error: msgErr } = await supabase.from('messages').insert({
-      conversation_id: conversation.id,
-      company_id: integration.company_id,
-      sender_type: 'customer',
-      message_type: 'text',
-      content: text,
-      metadata: { page_id: pageId, sender_id: senderId }
-    });
+    const { data: newMsg, error: msgErr } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversation.id,
+        company_id: integration.company_id,
+        sender_type: 'customer',
+        message_type: 'text',
+        content: text,
+        metadata: { page_id: pageId, sender_id: senderId }
+      })
+      .select()
+      .single();
+
     if (msgErr) {
       console.error('Error creating message:', msgErr);
+    } else if (newMsg) {
+      // Trigger Webhook Dispatcher
+      await triggerCompanyWebhooks(integration.company_id, 'message.created', newMsg);
     }
   }
 }

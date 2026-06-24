@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { triggerCompanyWebhooks } from '@/lib/webhookDispatcher';
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -78,6 +79,11 @@ export async function POST(req: Request) {
     if (msgErr) {
       console.error('Save message error:', msgErr);
       return NextResponse.json({ error: 'Failed to save message to database' }, { status: 500 });
+    }
+
+    if (newMessage) {
+      // Trigger Webhook Dispatcher
+      await triggerCompanyWebhooks(companyId, 'message.created', newMessage);
     }
 
     // 4. Update the conversation last message and reset unread count
