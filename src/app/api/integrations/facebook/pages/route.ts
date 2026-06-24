@@ -10,27 +10,36 @@ function getSupabase() {
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    const { accessToken, userId, companyId } = await req.json();
+    const { accessToken, userId, companyId, pagesFromOAuth } = await req.json();
 
-    if (!accessToken || !userId || !companyId) {
+    if (!companyId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
-    // 1. Fetch user's pages from Facebook Graph API
-    const res = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`
-    );
-    
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.error?.message || 'Failed to fetch Facebook pages');
-    }
+    let pages: Array<{ id: string; name: string; access_token: string }> = [];
 
-    const data = await res.json();
+    // If pages were pre-fetched via OAuth callback, use them directly
+    if (pagesFromOAuth && Array.isArray(pagesFromOAuth) && pagesFromOAuth.length > 0) {
+      pages = pagesFromOAuth;
+    } else if (accessToken) {
+      // Fallback: Fetch user's pages from Facebook Graph API
+      const res = await fetch(
+        `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`
+      );
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error?.message || 'Failed to fetch Facebook pages');
+      }
+
+      const data = await res.json();
+      pages = data.data || [];
+    } else {
+      return NextResponse.json({ error: 'Missing access token or pages data' }, { status: 400 });
+    }
 
     // 2. Automatically subscribe the app to webhooks for all returned pages
     // and save them to the integrations table
-    const pages = data.data || [];
     const savedIntegrations = [];
     const errors: string[] = [];
 
