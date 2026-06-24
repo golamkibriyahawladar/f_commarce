@@ -58,49 +58,16 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   fetchConversations: async (companyId) => {
     set({ loading: true });
     try {
-      // Get current logged-in user profile & assignments
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      const { data: profile, error: profileErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      if (profileErr) throw profileErr;
-
-      let assignedIntegrationIds: string[] = [];
-      if (profile.role === 'agent') {
-        const { data: assigns, error: assignsErr } = await supabase
-          .from('profile_assignments')
-          .select('integration_id')
-          .eq('profile_id', user.id);
-        
-        if (assignsErr) throw assignsErr;
-        assignedIntegrationIds = (assigns || []).map(a => a.integration_id);
-      }
-
       // Fetch conversations with joined customers & integrations details
-      let query = supabase
+      const { data: convs, error: convErr } = await supabase
         .from('conversations')
         .select(`
           *,
           customer:customers(*),
           integration:integrations(*)
         `)
-        .eq('company_id', companyId);
-
-      // Apply agent workspace restrictions
-      if (profile.role === 'agent') {
-        if (assignedIntegrationIds.length === 0) {
-          set({ conversations: [], selectedConversationId: null, loading: false });
-          return;
-        }
-        query = query.in('integration_id', assignedIntegrationIds);
-      }
-
-      const { data: convs, error: convErr } = await query.order('last_message_at', { ascending: false });
+        .eq('company_id', companyId)
+        .order('last_message_at', { ascending: false });
 
       if (convErr) throw convErr;
 

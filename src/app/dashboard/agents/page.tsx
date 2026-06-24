@@ -2,65 +2,63 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Users, 
-  ShieldAlert, 
-  CheckCircle, 
+  Bot, 
+  Brain,
+  Sparkles,
   Plus, 
   X, 
   Loader2, 
   Settings2,
-  Lock,
+  Trash2,
+  CheckCircle, 
   Facebook,
   Instagram,
   MessageCircle,
   Webhook,
   Globe,
-  Shield,
-  Briefcase,
-  Layers,
-  Search
+  Sliders,
+  AlertCircle,
+  Key,
+  ShieldCheck,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
-
-interface Profile {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: 'owner' | 'manager' | 'agent';
-  company_id: string | null;
-  created_at: string;
-}
 
 interface Integration {
   id: string;
   company_id: string;
   provider: string;
   type: string;
-  credentials: any;
+  credentials: {
+    name?: string;
+    system_prompt?: string;
+    openai_key?: string;
+    assigned_integrations?: string[];
+    [key: string]: any;
+  };
   webhook_url?: string;
-  status: string;
+  status: 'active' | 'inactive' | 'error';
   created_at: string;
 }
 
-interface ProfileAssignment {
-  id: string;
-  profile_id: string;
-  integration_id: string;
-}
-
-export default function AgentsPage() {
+export default function AIAgentsPage() {
   const { profile } = useAuthStore();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [assignments, setAssignments] = useState<ProfileAssignment[]>([]);
+  const [agents, setAgents] = useState<Integration[]>([]);
+  const [channels, setChannels] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  // Modal State
-  const [selectedAgent, setSelectedAgent] = useState<Profile | null>(null);
-  const [tempAssignedIds, setTempAssignedIds] = useState<string[]>([]);
-  const [savingAssignments, setSavingAssignments] = useState(false);
+  // Form State
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<Integration | null>(null);
+  const [agentName, setAgentName] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [assignedChannelIds, setAssignedChannelIds] = useState<string[]>([]);
+  const [agentStatus, setAgentStatus] = useState<'active' | 'inactive'>('active');
+  const [saving, setSaving] = useState(false);
+  const [showKey, setShowKey] = useState(false);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning'; visible: boolean }>({ message: '', type: 'success', visible: false });
@@ -78,36 +76,21 @@ export default function AgentsPage() {
     if (!profile?.company_id) return;
     setLoading(true);
     try {
-      // 1. Fetch profiles in the same company
-      const { data: profs, error: profsErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('company_id', profile.company_id);
-      if (profsErr) throw profsErr;
-
-      // 2. Fetch all integrations for the company
+      // Fetch all integrations for the company
       const { data: ints, error: intsErr } = await supabase
         .from('integrations')
         .select('*')
         .eq('company_id', profile.company_id);
       if (intsErr) throw intsErr;
 
-      // 3. Fetch all profile assignments for the company
-      const integrationIds = (ints || []).map(i => i.id);
-      let loadedAssignments: ProfileAssignment[] = [];
+      const loadedIntegrations = ints || [];
       
-      if (integrationIds.length > 0) {
-        const { data: assigns, error: assignsErr } = await supabase
-          .from('profile_assignments')
-          .select('*')
-          .in('integration_id', integrationIds);
-        if (assignsErr) throw assignsErr;
-        loadedAssignments = assigns || [];
-      }
+      // Separate AI Agents and actual communications channels
+      const aiAgents = loadedIntegrations.filter(i => i.provider === 'ai_agent');
+      const communicationChannels = loadedIntegrations.filter(i => i.provider !== 'ai_agent');
 
-      setProfiles(profs || []);
-      setIntegrations(ints || []);
-      setAssignments(loadedAssignments);
+      setAgents(aiAgents);
+      setChannels(communicationChannels);
     } catch (err: any) {
       console.error(err);
       showToast('Error loading agents: ' + err.message, 'error');
@@ -122,106 +105,159 @@ export default function AgentsPage() {
     }
   }, [profile?.company_id]);
 
-  const handleOpenAssignModal = (agent: Profile) => {
-    setSelectedAgent(agent);
-    // Find integrations currently assigned to this agent
-    const currentAssignments = assignments
-      .filter(a => a.profile_id === agent.id)
-      .map(a => a.integration_id);
-    setTempAssignedIds(currentAssignments);
+  const handleOpenCreateModal = () => {
+    setSelectedAgent(null);
+    setAgentName('');
+    setSystemPrompt('You are a helpful customer support assistant for our store. Answer questions politely and concisely.');
+    setOpenaiKey('');
+    setAssignedChannelIds([]);
+    setAgentStatus('active');
+    setShowKey(false);
+    setModalOpen(true);
   };
 
-  const handleToggleAssignment = (integrationId: string) => {
-    setTempAssignedIds(prev => 
-      prev.includes(integrationId)
-        ? prev.filter(id => id !== integrationId)
-        : [...prev, integrationId]
+  const handleOpenEditModal = (agent: Integration) => {
+    setSelectedAgent(agent);
+    setAgentName(agent.credentials.name || '');
+    setSystemPrompt(agent.credentials.system_prompt || '');
+    // Mask key if exists, else empty
+    setOpenaiKey(agent.credentials.openai_key ? '••••••••' : '');
+    setAssignedChannelIds(agent.credentials.assigned_integrations || []);
+    setAgentStatus(agent.status === 'active' ? 'active' : 'inactive');
+    setShowKey(false);
+    setModalOpen(true);
+  };
+
+  const handleToggleChannel = (channelId: string) => {
+    setAssignedChannelIds(prev => 
+      prev.includes(channelId)
+        ? prev.filter(id => id !== channelId)
+        : [...prev, channelId]
     );
   };
 
-  const handleSaveAssignments = async () => {
-    if (!selectedAgent || !profile?.id) return;
-    setSavingAssignments(true);
+  const handleSaveAgent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.company_id) return;
+    if (!agentName.trim()) {
+      showToast('Please enter a name for the AI Agent.', 'warning');
+      return;
+    }
+    if (!systemPrompt.trim()) {
+      showToast('Please enter a system prompt.', 'warning');
+      return;
+    }
 
-    const agentId = selectedAgent.id;
-    const initialAssignedIds = assignments
-      .filter(a => a.profile_id === agentId)
-      .map(a => a.integration_id);
-
-    // Calculate additions and removals
-    const toAdd = tempAssignedIds.filter(id => !initialAssignedIds.includes(id));
-    const toRemove = initialAssignedIds.filter(id => !tempAssignedIds.includes(id));
+    setSaving(true);
 
     try {
-      // 1. Delete removed assignments
-      if (toRemove.length > 0) {
-        const { error: delErr } = await supabase
-          .from('profile_assignments')
-          .delete()
-          .eq('profile_id', agentId)
-          .in('integration_id', toRemove);
-        if (delErr) throw delErr;
+      // Determine final API Key
+      let finalApiKey = openaiKey;
+      if (selectedAgent && openaiKey === '••••••••') {
+        finalApiKey = selectedAgent.credentials.openai_key || '';
       }
 
-      // 2. Insert new assignments
-      if (toAdd.length > 0) {
-        const insertRows = toAdd.map(id => ({
-          profile_id: agentId,
-          integration_id: id,
-          assigned_by: profile.id
-        }));
+      const credentials = {
+        name: agentName.trim(),
+        system_prompt: systemPrompt.trim(),
+        openai_key: finalApiKey.trim(),
+        assigned_integrations: assignedChannelIds
+      };
 
-        const { error: insErr } = await supabase
-          .from('profile_assignments')
-          .insert(insertRows);
-        if (insErr) throw insErr;
+      if (selectedAgent) {
+        // Update existing agent
+        const { error } = await supabase
+          .from('integrations')
+          .update({
+            credentials,
+            status: agentStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', selectedAgent.id);
+
+        if (error) throw error;
+        showToast(`AI Agent '${agentName}' updated successfully!`, 'success');
+      } else {
+        // Create new agent integration
+        const { error } = await supabase
+          .from('integrations')
+          .insert({
+            company_id: profile.company_id,
+            provider: 'ai_agent',
+            type: 'webhook', // Supported check constraint type
+            credentials,
+            status: agentStatus
+          });
+
+        if (error) throw error;
+        showToast(`AI Agent '${agentName}' created successfully!`, 'success');
       }
 
-      showToast(`Successfully updated channel assignments for ${selectedAgent.full_name || 'Agent'}!`, 'success');
-      
-      // Refresh assignments in local state
+      setModalOpen(false);
       await fetchData();
-      setSelectedAgent(null);
     } catch (err: any) {
       console.error(err);
-      showToast('Failed to save assignments: ' + err.message, 'error');
+      showToast('Failed to save AI Agent: ' + err.message, 'error');
     } finally {
-      setSavingAssignments(false);
+      setSaving(false);
     }
   };
 
-  const getIntegrationDetails = (integration: Integration) => {
-    let title = integration.provider.toUpperCase();
-    let subtitle = '';
+  const handleDeleteAgent = async (agent: Integration) => {
+    if (!confirm(`Are you sure you want to delete '${agent.credentials.name || 'this AI Agent'}'?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('integrations')
+        .delete()
+        .eq('id', agent.id);
+
+      if (error) throw error;
+      showToast('AI Agent deleted successfully.', 'success');
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to delete agent: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleStatus = async (agent: Integration) => {
+    const newStatus = agent.status === 'active' ? 'inactive' : 'active';
+    try {
+      const { error } = await supabase
+        .from('integrations')
+        .update({ status: newStatus })
+        .eq('id', agent.id);
+
+      if (error) throw error;
+      showToast(`Agent is now ${newStatus}.`, 'success');
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to toggle status: ' + err.message, 'error');
+    }
+  };
+
+  const getChannelDetails = (channel: Integration) => {
+    let title = channel.provider.toUpperCase();
     let icon = <Globe className="w-4 h-4 text-zinc-500" />;
 
-    if (integration.provider === 'facebook') {
-      title = integration.credentials?.page_name || 'Facebook Page';
-      subtitle = 'Facebook DM Sync';
-      icon = <Facebook className="w-4 h-4 text-blue-600 animate-pulse" />;
-    } else if (integration.provider === 'instagram') {
-      title = integration.credentials?.page_name || 'Instagram Account';
-      subtitle = 'Instagram DMs';
-      icon = <Instagram className="w-4 h-4 text-pink-600 animate-pulse" />;
-    } else if (integration.provider === 'whatsapp') {
+    if (channel.provider === 'facebook') {
+      title = channel.credentials?.page_name || 'Facebook Page';
+      icon = <Facebook className="w-4 h-4 text-blue-600 shrink-0" />;
+    } else if (channel.provider === 'instagram') {
+      title = channel.credentials?.page_name || 'Instagram DM';
+      icon = <Instagram className="w-4 h-4 text-pink-600 shrink-0" />;
+    } else if (channel.provider === 'whatsapp') {
       title = 'WhatsApp Business';
-      subtitle = 'Official Cloud API';
-      icon = <MessageCircle className="w-4 h-4 text-emerald-500 animate-pulse" />;
-    } else if (integration.provider === 'webhook') {
-      title = integration.credentials?.name || 'Custom Webhook';
-      subtitle = 'Outbound Events';
-      icon = <Webhook className="w-4 h-4 text-indigo-500 animate-pulse" />;
+      icon = <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />;
+    } else if (channel.provider === 'webhook') {
+      title = channel.credentials?.name || 'Custom Webhook';
+      icon = <Webhook className="w-4 h-4 text-indigo-500 shrink-0" />;
     }
 
-    return { title, subtitle, icon };
+    return { title, icon };
   };
-
-  const filteredProfiles = profiles.filter(p => {
-    const fullName = p.full_name?.toLowerCase() || '';
-    const email = p.email.toLowerCase();
-    const query = searchQuery.toLowerCase();
-    return fullName.includes(query) || email.includes(query);
-  });
 
   const isAdmin = profile?.role === 'owner' || profile?.role === 'manager';
 
@@ -232,251 +268,362 @@ export default function AgentsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
-            <Users className="w-6 h-6 text-emerald-600 shrink-0" />
-            Agent Assignments
+            <Bot className="w-6.5 h-6.5 text-emerald-600 shrink-0" />
+            AI Agents Manager
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">Manage agent profiles and assign them to specific communication channels.</p>
-        </div>
-      </div>
-
-      {/* Stats Board */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600">
-            <Briefcase className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="block text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Total Members</span>
-            <span className="text-2xl font-extrabold text-zinc-900 leading-tight">{profiles.length}</span>
-          </div>
+          <p className="text-sm text-zinc-500 mt-1">Configure intelligent AI Chatbots and deploy them as auto-responders across your communication channels.</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-600">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="block text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Active Channels</span>
-            <span className="text-2xl font-extrabold text-zinc-900 leading-tight">{integrations.length}</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-600">
-            <Shield className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="block text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Access Roles</span>
-            <span className="text-2xl font-extrabold text-zinc-900 leading-tight">
-              {profiles.filter(p => p.role === 'owner').length} Owners | {profiles.filter(p => p.role === 'agent').length} Agents
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Profiles Search and Table Card */}
-      <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col">
-        
-        {/* Search Header */}
-        <div className="p-4 border-b border-zinc-150 flex items-center gap-3">
-          <Search className="w-4 h-4 text-zinc-400 shrink-0" />
-          <input 
-            type="text" 
-            placeholder="Search agents by name or email..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent border-0 text-sm focus:outline-none text-zinc-800 placeholder-zinc-400"
-          />
-        </div>
-
-        {/* Profile Assignments Table */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-            <p className="text-zinc-500 text-sm">Fetching agent lists...</p>
-          </div>
-        ) : filteredProfiles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-zinc-500 text-sm">No profiles found matching your search.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-zinc-50 border-b border-zinc-150 text-zinc-500 font-bold uppercase text-[10px] tracking-wider">
-                  <th className="p-4">Name & Email</th>
-                  <th className="p-4">System Role</th>
-                  <th className="p-4">Assigned Integrations</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 text-zinc-700">
-                {filteredProfiles.map((userProfile) => {
-                  const agentAssignments = assignments.filter(a => a.profile_id === userProfile.id);
-                  const isSelf = userProfile.id === profile?.id;
-
-                  return (
-                    <tr key={userProfile.id} className="hover:bg-zinc-50/50 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold text-xs shrink-0 uppercase">
-                            {userProfile.full_name?.charAt(0) || 'U'}
-                          </div>
-                          <div>
-                            <span className="font-semibold text-zinc-900 text-sm flex items-center gap-1.5">
-                              {userProfile.full_name || 'Anonymous User'}
-                              {isSelf && (
-                                <span className="bg-zinc-100 text-zinc-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-zinc-200">
-                                  You
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-xs text-zinc-500 block">{userProfile.email}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border capitalize ${
-                          userProfile.role === 'owner' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                          userProfile.role === 'manager' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          'bg-zinc-100 text-zinc-700 border-zinc-200'
-                        }`}>
-                          {userProfile.role}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {agentAssignments.length === 0 ? (
-                          <span className="text-xs text-zinc-400 italic">No channels assigned</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5 max-w-sm">
-                            {agentAssignments.map((a) => {
-                              const integration = integrations.find(i => i.id === a.integration_id);
-                              if (!integration) return null;
-                              const details = getIntegrationDetails(integration);
-
-                              return (
-                                <div key={a.id} className="flex items-center gap-1 bg-zinc-50 border border-zinc-250 px-2 py-1 rounded-lg text-xs text-zinc-800">
-                                  {details.icon}
-                                  <span className="font-semibold text-[11px] max-w-[100px] truncate">{details.title}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        {isAdmin ? (
-                          <button 
-                            onClick={() => handleOpenAssignModal(userProfile)}
-                            className="flex items-center gap-1.5 text-xs text-zinc-650 hover:text-emerald-700 font-semibold border border-zinc-200 hover:border-emerald-200 bg-white hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors ml-auto active:scale-95 duration-200"
-                          >
-                            <Settings2 className="w-3.5 h-3.5" />
-                            Assign Channels
-                          </button>
-                        ) : (
-                          <span className="text-xs text-zinc-400 italic flex items-center justify-end gap-1.5">
-                            <Lock className="w-3 h-3 text-zinc-300" />
-                            Read-Only
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        {isAdmin && (
+          <button
+            onClick={handleOpenCreateModal}
+            className="flex items-center justify-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4.5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/10 active:scale-95 duration-200"
+          >
+            <Plus className="w-4 h-4" />
+            Create AI Agent
+          </button>
         )}
       </div>
 
-      {/* Assign Channels Modal */}
-      {selectedAgent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+      {/* Info Notice */}
+      <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4.5 mb-8 flex items-start gap-3">
+        <Sparkles className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+        <div>
+          <h4 className="text-xs font-bold text-zinc-900">How AI Agents auto-respond:</h4>
+          <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+            1. Assign the agent to one or more of your active channels.<br />
+            2. Open the <strong>Inbox</strong>, select a conversation thread, and toggle on <strong>AI Autopilot</strong> for that thread.<br />
+            3. Incoming messages from customers on that channel will be processed by this AI Agent automatically using your system instructions.
+          </p>
+        </div>
+      </div>
+
+      {/* Agents Grid List */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white rounded-2xl border border-zinc-200 shadow-sm">
+          <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+          <p className="text-zinc-500 text-sm">Loading AI Agents...</p>
+        </div>
+      ) : agents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-2xl border border-zinc-200 shadow-sm px-6">
+          <Brain className="w-12 h-12 text-zinc-300 mb-3 animate-pulse" />
+          <h3 className="font-bold text-zinc-800 text-base">No AI Agents Configured</h3>
+          <p className="text-zinc-500 text-xs mt-1 max-w-sm">Create your first AI agent assistant to automate customer support across pages and webhooks.</p>
+          {isAdmin && (
+            <button
+              onClick={handleOpenCreateModal}
+              className="mt-4 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/70 font-semibold px-4 py-2 rounded-xl transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Configure First Agent
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {agents.map((agent) => {
+            const assignedIds = agent.credentials?.assigned_integrations || [];
             
-            {/* Modal Header */}
-            <div className="flex justify-between items-center p-5 border-b border-zinc-150 shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-zinc-900">Assign Channels</h3>
-                <p className="text-xs text-zinc-500 mt-0.5">Assign integrations to {selectedAgent.full_name || 'Agent'}</p>
+            return (
+              <div 
+                key={agent.id} 
+                className={`bg-white rounded-2xl border transition-all duration-300 shadow-sm hover:shadow-md flex flex-col justify-between overflow-hidden relative group ${
+                  agent.status === 'active' ? 'border-zinc-200' : 'border-zinc-200 opacity-70 bg-zinc-50/20'
+                }`}
+              >
+                {/* Agent Header */}
+                <div className="p-5 border-b border-zinc-100">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl border shrink-0 ${
+                        agent.status === 'active' 
+                          ? 'bg-emerald-55 border-emerald-205 text-emerald-700' 
+                          : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                      }`}>
+                        <Bot className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-zinc-900 text-base tracking-tight truncate max-w-[150px]">
+                          {agent.credentials?.name || 'AI Assistant'}
+                        </h3>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold border mt-1 select-none ${
+                          agent.status === 'active'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-zinc-100 text-zinc-500 border-zinc-200'
+                        }`}>
+                          {agent.status === 'active' ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => handleToggleStatus(agent)}
+                        title={agent.status === 'active' ? 'Deactivate Agent' : 'Activate Agent'}
+                        className={`p-1.5 rounded-lg border transition-all ${
+                          agent.status === 'active' 
+                            ? 'hover:bg-amber-50 border-zinc-200 text-zinc-500 hover:text-amber-700 hover:border-amber-200' 
+                            : 'hover:bg-emerald-50 border-zinc-200 text-zinc-500 hover:text-emerald-700 hover:border-emerald-200'
+                        }`}
+                      >
+                        <Sliders className="w-3.5 h-3.5" />
+                      </button>
+                      {isAdmin && (
+                        <>
+                          <button 
+                            onClick={() => handleOpenEditModal(agent)}
+                            title="Edit Agent settings"
+                            className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-zinc-500 hover:text-zinc-800 transition-all"
+                          >
+                            <Settings2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteAgent(agent)}
+                            title="Delete Agent"
+                            className="p-1.5 rounded-lg border border-zinc-200 hover:bg-red-50 text-zinc-500 hover:text-red-600 hover:border-red-200 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Prompt & Config Body */}
+                <div className="p-5 flex-1 space-y-4 text-xs">
+                  <div>
+                    <span className="block text-zinc-400 font-bold uppercase tracking-wider text-[9px] mb-1.5">System Prompt</span>
+                    <p className="text-zinc-650 line-clamp-3 bg-zinc-50/80 border border-zinc-150 p-2.5 rounded-xl italic leading-relaxed text-[11px]">
+                      "{agent.credentials?.system_prompt}"
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="block text-zinc-400 font-bold uppercase tracking-wider text-[9px] mb-1.5">API Key Authentication</span>
+                    <div className="flex items-center gap-1.5 text-zinc-500">
+                      <Key className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                      {agent.credentials?.openai_key ? (
+                        <span className="text-[11px] font-medium flex items-center gap-1 text-emerald-700">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Custom OpenAI Key Loaded
+                        </span>
+                      ) : (
+                        <span className="text-[11px] italic text-zinc-450">
+                          Using default server config key
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Assigned Channels */}
+                  <div>
+                    <span className="block text-zinc-400 font-bold uppercase tracking-wider text-[9px] mb-2">Connected Channels ({assignedIds.length})</span>
+                    {assignedIds.length === 0 ? (
+                      <span className="text-zinc-450 italic block text-[11px] bg-zinc-50 p-2 rounded-lg border border-dashed border-zinc-200 text-center">No assigned channels</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {assignedIds.map(chanId => {
+                          const chan = channels.find(c => c.id === chanId);
+                          if (!chan) return null;
+                          const details = getChannelDetails(chan);
+                          return (
+                            <div key={chanId} className="flex items-center gap-1 bg-zinc-50 border border-zinc-200 px-2 py-1 rounded-lg">
+                              {details.icon}
+                              <span className="font-semibold text-[10px] text-zinc-700 max-w-[110px] truncate">{details.title}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add / Edit Agent Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <form 
+            onSubmit={handleSaveAgent}
+            className="bg-white w-full max-w-xl rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center p-5 border-b border-zinc-150 shrink-0 bg-zinc-50/50">
+              <div className="flex items-center gap-2">
+                <Brain className="w-5.5 h-5.5 text-emerald-600" />
+                <h3 className="text-lg font-bold text-zinc-900">
+                  {selectedAgent ? 'Edit AI Agent Settings' : 'Create AI Agent'}
+                </h3>
               </div>
               <button 
-                onClick={() => setSelectedAgent(null)}
-                className="p-1 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all"
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="p-1 text-zinc-455 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Body: Integrations List */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-4">
-              {integrations.length === 0 ? (
-                <div className="text-center py-10">
-                  <p className="text-sm text-zinc-500">No active integrations found in your workspace.</p>
-                  <p className="text-xs text-zinc-400 mt-1">Please connect integrations in the Settings first.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {integrations.map((integration) => {
-                    const details = getIntegrationDetails(integration);
-                    const isChecked = tempAssignedIds.includes(integration.id);
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-5 text-sm">
+              
+              {/* Agent Name */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">AI Agent Name</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. E-Commerce Support Bot"
+                  value={agentName}
+                  onChange={(e) => setAgentName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-zinc-800 text-xs placeholder-zinc-400 transition-colors"
+                  required
+                />
+              </div>
 
-                    return (
-                      <button 
-                        key={integration.id}
-                        onClick={() => handleToggleAssignment(integration.id)}
-                        className={`w-full flex items-center justify-between p-3.5 border rounded-xl transition-all text-left group active:scale-[0.99] duration-200 ${
-                          isChecked 
-                            ? 'border-emerald-500 bg-emerald-50/20' 
-                            : 'border-zinc-200 hover:border-zinc-350 hover:bg-zinc-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3.5">
-                          <div className={`p-2.5 rounded-lg border transition-all ${
-                            isChecked ? 'bg-emerald-50 border-emerald-200' : 'bg-zinc-50 border-zinc-100'
-                          }`}>
-                            {details.icon}
-                          </div>
-                          <div>
-                            <h5 className="font-bold text-zinc-900 text-sm">{details.title}</h5>
-                            <p className="text-[10px] text-zinc-500 mt-0.5 capitalize">{details.subtitle} • {integration.provider}</p>
-                          </div>
-                        </div>
-                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                          isChecked 
-                            ? 'bg-emerald-600 border-emerald-600 text-white' 
-                            : 'border-zinc-300 group-hover:border-zinc-450 bg-white'
-                        }`}>
-                          {isChecked && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                        </div>
-                      </button>
-                    );
-                  })}
+              {/* System Instructions / Prompt */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">System Instructions / Prompt</label>
+                  <span className="text-[10px] text-zinc-400 font-semibold">Teaches the AI how to act</span>
                 </div>
-              )}
+                <textarea 
+                  rows={4}
+                  placeholder="Write clear rules. E.g. 'You are a customer agent. Answer nicely. If they ask about orders, fetch order tracking...'"
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-zinc-800 text-xs placeholder-zinc-400 transition-colors resize-none font-mono"
+                  required
+                />
+              </div>
+
+              {/* OpenAI Key */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">OpenAI API Key (Optional)</label>
+                  <span className="text-[10px] text-zinc-400 font-medium">Falls back to server standard env key if empty</span>
+                </div>
+                <div className="relative">
+                  <input 
+                    type={showKey ? 'text' : 'password'} 
+                    placeholder="sk-..."
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-zinc-800 text-xs placeholder-zinc-400 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-3 top-2.5 text-zinc-450 hover:text-zinc-700"
+                  >
+                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Channels Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Deploy to Communication Channels</label>
+                
+                {channels.length === 0 ? (
+                  <div className="bg-zinc-50 border border-zinc-150 rounded-xl p-4 text-center">
+                    <p className="text-zinc-500 text-xs">No social or webhook integrations connected yet.</p>
+                    <p className="text-zinc-400 text-[10px] mt-0.5">Please hook up integrations in the Settings page first.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto pr-1">
+                    {channels.map((chan) => {
+                      const details = getChannelDetails(chan);
+                      const isSelected = assignedChannelIds.includes(chan.id);
+
+                      return (
+                        <button
+                          key={chan.id}
+                          type="button"
+                          onClick={() => handleToggleChannel(chan.id)}
+                          className={`flex items-center justify-between p-2.5 border rounded-xl transition-all text-left active:scale-[0.98] duration-150 ${
+                            isSelected 
+                              ? 'border-emerald-500 bg-emerald-50/15'
+                              : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`p-1.5 rounded-lg border ${
+                              isSelected ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-zinc-50 border-zinc-100 text-zinc-500'
+                            }`}>
+                              {details.icon}
+                            </div>
+                            <span className="font-semibold text-xs text-zinc-800 truncate pr-2">{details.title}</span>
+                          </div>
+
+                          <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                            isSelected ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-zinc-300 bg-white'
+                          }`}>
+                            {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Selector */}
+              <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">Agent Status</label>
+                  <p className="text-zinc-400 text-[10px] mt-0.5">Toggle whether the agent is active and running.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAgentStatus('active')}
+                    className={`px-4 py-1.5 rounded-lg font-bold text-xs border transition-all ${
+                      agentStatus === 'active'
+                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                    }`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgentStatus('inactive')}
+                    className={`px-4 py-1.5 rounded-lg font-bold text-xs border transition-all ${
+                      agentStatus === 'inactive'
+                        ? 'bg-zinc-800 border-zinc-850 text-white shadow-sm'
+                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                    }`}
+                  >
+                    Inactive
+                  </button>
+                </div>
+              </div>
+
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-zinc-150 shrink-0 flex gap-3 bg-zinc-50">
+            {/* Footer */}
+            <div className="p-5 border-t border-zinc-150 shrink-0 flex gap-3 bg-zinc-50/50">
               <button 
                 type="button" 
-                onClick={() => setSelectedAgent(null)}
-                className="flex-1 py-2 px-4 border border-zinc-300 text-sm font-semibold text-zinc-700 rounded-lg hover:bg-zinc-50 bg-white transition-colors"
+                onClick={() => setModalOpen(false)}
+                className="flex-1 py-2 px-4 border border-zinc-300 text-xs font-bold text-zinc-700 rounded-lg hover:bg-zinc-50 bg-white transition-colors"
               >
                 Cancel
               </button>
               <button 
-                type="button" 
-                onClick={handleSaveAssignments}
-                disabled={savingAssignments}
-                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                type="submit" 
+                disabled={saving}
+                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md hover:shadow-emerald-600/10"
               >
-                {savingAssignments && <Loader2 className="w-4 h-4 animate-spin" />}
-                {savingAssignments ? 'Saving...' : 'Save Assignments'}
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving ? 'Saving...' : selectedAgent ? 'Save Changes' : 'Create Agent'}
               </button>
             </div>
-
-          </div>
+          </form>
         </div>
       )}
 
@@ -494,7 +641,7 @@ export default function AgentsPage() {
           'bg-zinc-900/90 border-zinc-700/50 text-zinc-50'
         }`}>
           <div className="shrink-0 mt-0.5">
-            {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <ShieldAlert className="w-5 h-5 text-red-400" />}
+            {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-red-400" />}
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold leading-relaxed">{toast.message}</p>

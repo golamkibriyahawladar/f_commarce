@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { triggerCompanyWebhooks } from '@/lib/webhookDispatcher';
+import { triggerAiReplyIfNeeded } from '@/lib/aiAgentExecutor';
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -151,6 +152,14 @@ export async function POST(
 
     // 7. Dispatch event to outgoing webhooks
     await triggerCompanyWebhooks(integration.company_id, 'message.created', newMsg);
+
+    // 8. Trigger AI Auto-reply asynchronously if AI Autopilot is enabled
+    triggerAiReplyIfNeeded(
+      integration.company_id,
+      conversation.id,
+      integration.id,
+      text
+    ).catch(err => console.error('Error invoking AI reply execution loop:', err));
 
     return NextResponse.json({ success: true, message: newMsg });
   } catch (error: any) {

@@ -19,7 +19,9 @@ import {
   Zap,
   ArrowRight,
   Shield,
-  ArrowLeft
+  ArrowLeft,
+  Bot,
+  Brain
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -29,7 +31,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function DocsPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'webhooks' | 'api' | 'security'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'webhooks' | 'api' | 'security' | 'ai_agents'>('overview');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -261,6 +263,18 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST') {
             >
               <ShieldCheck className="w-4 h-4" />
               Signature Security
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('ai_agents')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-left transition-all ${
+                activeTab === 'ai_agents' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10' 
+                  : 'bg-white text-zinc-700 hover:bg-zinc-50 border border-zinc-200 shadow-sm'
+              }`}
+            >
+              <Bot className="w-4 h-4" />
+              AI Autopilot & Agents
             </button>
           </div>
 
@@ -653,6 +667,80 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST') {
                     <li>Pass the raw request body string to update the hash, and output the digest as a hex string.</li>
                     <li>Compare your computed signature to the header signature. (We recommend using a constant-time string comparison function to prevent timing attacks).</li>
                   </ol>
+                </div>
+              </div>
+            )}
+
+            {/* AI Autopilot & Agents Section */}
+            {activeTab === 'ai_agents' && (
+              <div className="bg-white rounded-2xl border border-zinc-200 p-6 sm:p-8 shadow-sm space-y-6 animate-in fade-in duration-200">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-900 mb-2">AI Autopilot & Agents</h2>
+                  <p className="text-sm text-zinc-650 leading-relaxed">
+                    Autozy includes a powerful real-time automation engine powered by OpenAI's language models. You can create smart AI Chatbots with personalized instructions and assign them to handle conversations automatically.
+                  </p>
+                </div>
+
+                <div className="p-4.5 bg-emerald-50/40 border border-emerald-200/50 rounded-xl space-y-2.5">
+                  <h3 className="font-bold text-emerald-955 text-sm flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-emerald-600" />
+                    How AI Autopilot Works
+                  </h3>
+                  <p className="text-xs text-emerald-900/90 leading-relaxed">
+                    When a customer message arrives on an assigned communication channel, the platform checks if the conversation's <strong>AI Autopilot</strong> mode is enabled. If enabled, the message history is processed alongside the agent's custom system prompt via OpenAI's <code>gpt-4o-mini</code> model to generate and send an immediate auto-response.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-bold text-zinc-900 text-base">Configuring your AI Agent</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">1. System Prompt</h4>
+                      <p className="text-xs text-zinc-650 leading-relaxed">
+                        Specify instructions guiding the AI agent's tone, character, knowledge base, policies, and constraints. This teaches the bot how to interact with your store visitors.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">2. Deploy Channels</h4>
+                      <p className="text-xs text-zinc-650 leading-relaxed">
+                        Select which incoming channels this AI Agent manages. You can deploy a single agent to handle Facebook Page DMs, Instagram Messages, WhatsApp Business, and custom webhooks simultaneously.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 border-t border-zinc-100 pt-6">
+                  <h3 className="font-bold text-zinc-900 text-base">Custom Webhook AI Reply Flow</h3>
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    Custom Webhooks also support the AI Autopilot loop. Here is how message payloads flow when a client connects a custom WooCommerce or Shopify webhook to Autozy:
+                  </p>
+
+                  <div className="relative border-l-2 border-zinc-150 pl-6 space-y-6 py-2 ml-3">
+                    <div className="relative">
+                      <span className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-500 border-4 border-white ring-2 ring-emerald-100" />
+                      <h5 className="font-bold text-xs text-zinc-800 uppercase tracking-wide">1. Pushing Customer Event</h5>
+                      <p className="text-xs text-zinc-550 mt-1 leading-relaxed">
+                        Your system POSTs an incoming customer message event to <code>/api/webhooks/custom/[integration_id]</code>.
+                      </p>
+                    </div>
+
+                    <div className="relative">
+                      <span className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-indigo-500 border-4 border-white ring-2 ring-indigo-100" />
+                      <h5 className="font-bold text-xs text-zinc-800 uppercase tracking-wide">2. AI Completion Interceptor</h5>
+                      <p className="text-xs text-zinc-550 mt-1 leading-relaxed">
+                        If the conversation has <code>is_ai_mode</code> set to true, Autozy fetches the active AI Agent assigned to this integration, runs the prompt, and gets the completion response from OpenAI.
+                      </p>
+                    </div>
+
+                    <div className="relative">
+                      <span className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-blue-500 border-4 border-white ring-2 ring-blue-100" />
+                      <h5 className="font-bold text-xs text-zinc-800 uppercase tracking-wide">3. Outbound Webhook Trigger</h5>
+                      <p className="text-xs text-zinc-550 mt-1 leading-relaxed">
+                        The AI reply is saved as a message in the thread. Autozy immediately sends a POST request with the new message payload to your registered <strong>Outgoing Webhook URL</strong> so your system gets notified in real-time.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
