@@ -88,6 +88,8 @@ export default function AIAgentsPage() {
   const [modelName, setModelName] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
+  const [modelsList, setModelsList] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
   
   // 3. Pinecone Tab
   const [pineconeApiKey, setPineconeApiKey] = useState('');
@@ -175,6 +177,47 @@ export default function AIAgentsPage() {
     }
   };
 
+  const syncModels = async (provider: 'openai' | 'gemini', apiKeyVal?: string, forceSelectFirst = false, currentModelName?: string) => {
+    if (!profile?.company_id) return;
+    setLoadingModels(true);
+    try {
+      const keyToUse = apiKeyVal !== undefined ? apiKeyVal : (provider === 'openai' ? openaiKey : geminiKey);
+      const res = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          apiKey: keyToUse,
+          companyId: profile.company_id,
+          agentId: selectedAgent?.id
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to fetch models');
+      }
+
+      if (data.models && data.models.length > 0) {
+        setModelsList(data.models);
+        const activeModel = currentModelName || modelName;
+        if (forceSelectFirst || !data.models.includes(activeModel)) {
+          setModelName(data.models[0]);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching models:', err.message);
+      const fallbacks = provider === 'openai' 
+        ? ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo']
+        : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-2.0-flash-exp'];
+      setModelsList(fallbacks);
+      const activeModel = currentModelName || modelName;
+      if (forceSelectFirst || !fallbacks.includes(activeModel)) {
+        setModelName(fallbacks[0]);
+      }
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setSelectedAgent(null);
     setModalTab('core');
@@ -202,6 +245,7 @@ export default function AIAgentsPage() {
     setActiveTools([]);
     
     setShowKey(false);
+    syncModels('openai', '');
     setModalOpen(true);
   };
 
@@ -238,6 +282,11 @@ export default function AIAgentsPage() {
     
     // Fetch files in background
     fetchKbFiles(agent.id);
+    
+    const activeProvider = creds.llm_provider || 'openai';
+    const activeKey = activeProvider === 'openai' ? (creds.openai_key ? '••••••••' : '') : (creds.gemini_key ? '••••••••' : '');
+    const activeModel = creds.model_name || (activeProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini');
+    syncModels(activeProvider, activeKey, false, activeModel);
     
     setModalOpen(true);
   };
@@ -868,7 +917,7 @@ export default function AIAgentsPage() {
                       onChange={(e) => {
                         const prov = e.target.value as 'openai' | 'gemini';
                         setLlmProvider(prov);
-                        setModelName(prov === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini');
+                        syncModels(prov, prov === 'openai' ? openaiKey : geminiKey, true);
                       }}
                       className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
                     >
@@ -878,30 +927,39 @@ export default function AIAgentsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Model Name</label>
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Model Name</label>
+                      <button
+                        type="button"
+                        onClick={() => syncModels(llmProvider)}
+                        disabled={loadingModels}
+                        className="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        {loadingModels ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                            <span>Loading...</span>
+                          </>
+                        ) : (
+                          <span>🔄 Sync Models</span>
+                        )}
+                      </button>
+                    </div>
                     <select
                       value={modelName}
                       onChange={(e) => setModelName(e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
+                      disabled={loadingModels}
                     >
-                      {llmProvider === 'openai' ? (
-                        <>
-                          <option value="gpt-4o-mini">GPT-4o Mini (Default)</option>
-                          <option value="gpt-4o">GPT-4o</option>
-                          <option value="gpt-4">GPT-4</option>
-                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                          {modelName && !['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo'].includes(modelName) && (
-                            <option value={modelName}>{modelName} (Custom)</option>
-                          )}
-                        </>
+                      {loadingModels ? (
+                        <option value="">Loading available models...</option>
                       ) : (
                         <>
-                          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Default)</option>
-                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                          <option value="gemini-1.0-pro">Gemini 1.0 Pro</option>
-                          <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
-                          {modelName && !['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-2.0-flash-exp'].includes(modelName) && (
-                            <option value={modelName}>{modelName} (Custom)</option>
+                          {modelsList.map(model => (
+                            <option key={model} value={model}>{model}</option>
+                          ))}
+                          {modelName && !modelsList.includes(modelName) && (
+                            <option value={modelName}>{modelName} (Current)</option>
                           )}
                         </>
                       )}
