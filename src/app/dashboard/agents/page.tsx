@@ -177,7 +177,7 @@ export default function AIAgentsPage() {
     }
   };
 
-  const syncModels = async (provider: 'openai' | 'gemini', apiKeyVal?: string, forceSelectFirst = false, currentModelName?: string) => {
+  const syncModels = async (provider: 'openai' | 'gemini', apiKeyVal?: string, forceSelectFirst = false, currentModelName?: string, agentIdOverride?: string) => {
     if (!profile?.company_id) return;
     setLoadingModels(true);
     try {
@@ -189,7 +189,7 @@ export default function AIAgentsPage() {
           provider,
           apiKey: keyToUse,
           companyId: profile.company_id,
-          agentId: selectedAgent?.id
+          agentId: agentIdOverride || selectedAgent?.id
         })
       });
 
@@ -206,7 +206,7 @@ export default function AIAgentsPage() {
         }
       }
     } catch (err: any) {
-      console.error('Error fetching models:', err.message);
+      console.error('Error fetching models:', err?.message || err);
       const fallbacks = provider === 'openai' 
         ? ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo']
         : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-2.0-flash-exp'];
@@ -215,6 +215,8 @@ export default function AIAgentsPage() {
       if (forceSelectFirst || !fallbacks.includes(activeModel)) {
         setModelName(fallbacks[0]);
       }
+    } finally {
+      setLoadingModels(false);
     }
   };
 
@@ -286,7 +288,7 @@ export default function AIAgentsPage() {
     const activeProvider = creds.llm_provider || 'openai';
     const activeKey = activeProvider === 'openai' ? (creds.openai_key ? '••••••••' : '') : (creds.gemini_key ? '••••••••' : '');
     const activeModel = creds.model_name || (activeProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini');
-    syncModels(activeProvider, activeKey, false, activeModel);
+    syncModels(activeProvider, activeKey, false, activeModel, agent.id);
     
     setModalOpen(true);
   };
@@ -978,6 +980,7 @@ export default function AIAgentsPage() {
                           placeholder="sk-proj-..."
                           value={openaiKey}
                           onChange={(e) => setOpenaiKey(e.target.value)}
+                          onBlur={() => syncModels('openai', openaiKey, true)}
                           className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
                         />
                         <button
@@ -1001,6 +1004,7 @@ export default function AIAgentsPage() {
                           placeholder="AIzaSy..."
                           value={geminiKey}
                           onChange={(e) => setGeminiKey(e.target.value)}
+                          onBlur={() => syncModels('gemini', geminiKey, true)}
                           className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
                         />
                         <button
