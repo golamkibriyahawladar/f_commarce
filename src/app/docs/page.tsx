@@ -677,69 +677,133 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div>
                   <h2 className="text-xl font-bold text-zinc-900 mb-2">AI Autopilot & Agents</h2>
                   <p className="text-sm text-zinc-650 leading-relaxed">
-                    Autozy includes a powerful real-time automation engine powered by OpenAI's language models. You can create smart AI Chatbots with personalized instructions and assign them to handle conversations automatically.
+                    Autozy includes an advanced automation engine powered by multi-LLM options (OpenAI GPT & Google Gemini) and dynamic Retrieval-Augmented Generation (RAG). Super Admins and authorized users can construct, customize, and deploy AI Agents to automatically handle customer conversations in real-time.
                   </p>
                 </div>
 
                 <div className="p-4.5 bg-emerald-50/40 border border-emerald-200/50 rounded-xl space-y-2.5">
                   <h3 className="font-bold text-emerald-955 text-sm flex items-center gap-2">
                     <Brain className="w-4 h-4 text-emerald-600" />
-                    How AI Autopilot Works
+                    How AI Autopilot & RAG Works
                   </h3>
                   <p className="text-xs text-emerald-900/90 leading-relaxed">
-                    When a customer message arrives on an assigned communication channel, the platform checks if the conversation's <strong>AI Autopilot</strong> mode is enabled. If enabled, the message history is processed alongside the agent's custom system prompt via OpenAI's <code>gpt-4o-mini</code> model to generate and send an immediate auto-response.
+                    When a customer message arrives, the platform checks if <strong>AI Autopilot</strong> mode is enabled. If active, it retrieves the company's dynamic credentials (OpenAI/Gemini keys and Pinecone settings), queries the specified Pinecone namespace for relevant knowledge base context, constructs the context-augmented prompt, routes it to the selected LLM provider, and logs detailed execution token/timing metrics.
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-bold text-zinc-900 text-base">Configuring your AI Agent</h3>
+                  <h3 className="font-bold text-zinc-900 text-base">Key Capabilities</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
-                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">1. System Prompt</h4>
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">1. Dynamic Provider Credentials</h4>
                       <p className="text-xs text-zinc-650 leading-relaxed">
-                        Specify instructions guiding the AI agent's tone, character, knowledge base, policies, and constraints. This teaches the bot how to interact with your store visitors.
+                        Configure OpenAI API Keys, Gemini API Keys, and Pinecone configurations (API Key, Index Name, Namespace) directly from the Agent settings modal. No credentials are hardcoded.
                       </p>
                     </div>
 
                     <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
-                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">2. Deploy Channels</h4>
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">2. Knowledge Base RAG Ingestion</h4>
                       <p className="text-xs text-zinc-650 leading-relaxed">
-                        Select which incoming channels this AI Agent manages. You can deploy a single agent to handle Facebook Page DMs, Instagram Messages, WhatsApp Business, and custom webhooks simultaneously.
+                        Upload PDF, DOCX, Markdown, or text files directly to the Agent's knowledge base. Files are chunked, vectorized using OpenAI or Gemini embeddings, and stored in your custom Pinecone namespace.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">3. Multi-LLM Routing</h4>
+                      <p className="text-xs text-zinc-650 leading-relaxed">
+                        Assign agents to run completions via different models (e.g., <code>gpt-4o-mini</code>, <code>gpt-4o</code>, <code>gemini-1.5-pro</code>, <code>gemini-1.5-flash</code>). Agent prompts and configurations can be updated dynamically.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">4. Run Telemetry Logs</h4>
+                      <p className="text-xs text-zinc-650 leading-relaxed">
+                        Every auto-reply traces token usage (prompt, completion, total tokens), response latency, model name, and individual run steps (embedding creation, database queries, and completion steps).
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-4 border-t border-zinc-100 pt-6">
-                  <h3 className="font-bold text-zinc-900 text-base">Custom Webhook AI Reply Flow</h3>
+                <div className="space-y-3 border-t border-zinc-100 pt-6">
+                  <h3 className="font-bold text-zinc-900 text-base">Telemetry Logs JSON Format</h3>
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    Custom Webhooks also support the AI Autopilot loop. Here is how message payloads flow when a client connects a custom WooCommerce or Shopify webhook to Autozy:
+                    The agent execution saves detailed telemetry reports attached as metadata to each generated message. The logs capture step-by-step performance metrics in the following format:
                   </p>
-
-                  <div className="relative border-l-2 border-zinc-150 pl-6 space-y-6 py-2 ml-3">
-                    <div className="relative">
-                      <span className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-500 border-4 border-white ring-2 ring-emerald-100" />
-                      <h5 className="font-bold text-xs text-zinc-800 uppercase tracking-wide">1. Pushing Customer Event</h5>
-                      <p className="text-xs text-zinc-550 mt-1 leading-relaxed">
-                        Your system POSTs an incoming customer message event to <code>/api/webhooks/custom/[integration_id]</code>.
-                      </p>
-                    </div>
-
-                    <div className="relative">
-                      <span className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-indigo-500 border-4 border-white ring-2 ring-indigo-100" />
-                      <h5 className="font-bold text-xs text-zinc-800 uppercase tracking-wide">2. AI Completion Interceptor</h5>
-                      <p className="text-xs text-zinc-550 mt-1 leading-relaxed">
-                        If the conversation has <code>is_ai_mode</code> set to true, Autozy fetches the active AI Agent assigned to this integration, runs the prompt, and gets the completion response from OpenAI.
-                      </p>
-                    </div>
-
-                    <div className="relative">
-                      <span className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-blue-500 border-4 border-white ring-2 ring-blue-100" />
-                      <h5 className="font-bold text-xs text-zinc-800 uppercase tracking-wide">3. Outbound Webhook Trigger</h5>
-                      <p className="text-xs text-zinc-550 mt-1 leading-relaxed">
-                        The AI reply is saved as a message in the thread. Autozy immediately sends a POST request with the new message payload to your registered <strong>Outgoing Webhook URL</strong> so your system gets notified in real-time.
-                      </p>
-                    </div>
+                  <div className="bg-zinc-955 rounded-xl p-4 font-mono text-xs text-zinc-300 relative overflow-hidden">
+                    <button 
+                      onClick={() => copyToClipboard(JSON.stringify([
+                        {
+                          "chat_info": {
+                            "session_id": "20"
+                          },
+                          "usage": {
+                            "prompt_tokens": 11082,
+                            "completion_tokens": 312,
+                            "total_tokens": 11394
+                          },
+                          "performance": {
+                            "model_used": "gpt-4o-mini",
+                            "response_time_ms": 10615,
+                            "llm_runs": [
+                              {
+                                "run_index": 0,
+                                "prompt_tokens": 1555,
+                                "completion_tokens": 35,
+                                "total_tokens": 1590,
+                                "execution_time_ms": 2648,
+                                "model": "gpt-4o-mini"
+                              },
+                              {
+                                "run_index": 1,
+                                "prompt_tokens": 9527,
+                                "completion_tokens": 277,
+                                "total_tokens": 9804,
+                                "execution_time_ms": 7967,
+                                "model": "gpt-4o-mini"
+                              }
+                            ]
+                          }
+                        }
+                      ], null, 2), 'telemetry_json')}
+                      className="absolute right-3 top-3 bg-white/10 hover:bg-white/20 p-2 rounded-lg text-zinc-300 transition-colors"
+                      title="Copy Telemetry JSON"
+                    >
+                      {copiedId === 'telemetry_json' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                    <pre className="overflow-x-auto text-[11px] leading-relaxed">
+{`[
+  {
+    "chat_info": { "session_id": "20" },
+    "usage": {
+      "prompt_tokens": 11082,
+      "completion_tokens": 312,
+      "total_tokens": 11394
+    },
+    "performance": {
+      "model_used": "gpt-4o-mini",
+      "response_time_ms": 10615,
+      "llm_runs": [
+        {
+          "run_index": 0,
+          "prompt_tokens": 1555,
+          "completion_tokens": 35,
+          "total_tokens": 1590,
+          "execution_time_ms": 2648,
+          "model": "gpt-4o-mini"
+        },
+        {
+          "run_index": 1,
+          "prompt_tokens": 9527,
+          "completion_tokens": 277,
+          "total_tokens": 9804,
+          "execution_time_ms": 7967,
+          "model": "gpt-4o-mini"
+        }
+      ]
+    }
+  }
+]`}
+                    </pre>
                   </div>
                 </div>
               </div>

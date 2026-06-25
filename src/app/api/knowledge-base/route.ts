@@ -1,11 +1,9 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// Safely require third party libraries without TS type issues
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
 
 const SUPER_ADMIN_EMAILS = [
   'dev@autozy.app',
@@ -179,9 +177,11 @@ export async function POST(req: Request) {
     // Parse text based on file type
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     if (fileExtension === 'pdf') {
+      const pdfParse = require('pdf-parse');
       const pdfData = await pdfParse(buffer);
       extractedText = pdfData.text || '';
     } else if (fileExtension === 'docx') {
+      const mammoth = require('mammoth');
       const docData = await mammoth.extractRawText({ buffer });
       extractedText = docData.value || '';
     } else {
@@ -308,7 +308,7 @@ export async function POST(req: Request) {
     const pcBatchSize = 50;
     for (let i = 0; i < vectors.length; i += pcBatchSize) {
       const pcBatch = vectors.slice(i, i + pcBatchSize);
-      await index.namespace(pineconeNamespace).upsert(pcBatch);
+      await index.namespace(pineconeNamespace).upsert({ records: pcBatch as any });
     }
 
     // Update DB file status to 'completed'

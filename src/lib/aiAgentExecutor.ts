@@ -40,7 +40,6 @@ export async function triggerAiReplyIfNeeded(
     // 1. Check if AI Autopilot is enabled on this conversation
     const { data: conv, error: convErr } = await supabase
       .from('conversations')
-      .from('conversations')
       .select('*')
       .eq('id', conversationId)
       .single();
@@ -280,7 +279,7 @@ ${systemPrompt}`;
 
       aiReplyText = result.response?.text()?.trim() || '';
 
-      const usageMetadata = result.response?.usageMetadata || {};
+      const usageMetadata = (result.response?.usageMetadata || {}) as any;
       const promptTokens = usageMetadata.promptTokenCount || estimateTokens(systemPrompt);
       const completionTokens = usageMetadata.candidatesTokenCount || estimateTokens(aiReplyText);
       const totalTokens = usageMetadata.totalTokenCount || (promptTokens + completionTokens);

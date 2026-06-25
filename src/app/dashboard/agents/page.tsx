@@ -24,7 +24,6 @@ import {
   EyeOff,
   Database,
   FileText,
-  Tool,
   UploadCloud,
   FileUp,
   Cpu
