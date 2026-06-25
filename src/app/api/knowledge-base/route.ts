@@ -295,16 +295,22 @@ export async function POST(req: Request) {
       }
 
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
       
       // Call Google Gemini API to embed text chunks
       for (let i = 0; i < chunks.length; i++) {
-        const result = await model.embedContent(chunks[i]);
+        // @ts-ignore
+        const result = await model.embedContent({
+          content: { parts: [{ text: chunks[i] }] },
+          outputDimensionality: 768
+        });
 
         if (result.embedding?.values) {
+          const rawValues = result.embedding.values;
+          const finalValues = rawValues.length > 768 ? rawValues.slice(0, 768) : rawValues;
           vectors.push({
             id: `${kbFile.id}_${i}`,
-            values: result.embedding.values,
+            values: finalValues,
             metadata: {
               text: chunks[i],
               file_name: file.name,

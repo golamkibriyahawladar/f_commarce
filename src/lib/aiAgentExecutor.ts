@@ -144,9 +144,14 @@ export async function triggerAiReplyIfNeeded(
             const geminiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key;
             if (geminiKey) {
               const genAI = new GoogleGenerativeAI(geminiKey);
-              const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
-              const result = await model.embedContent(userMessageText);
-              queryEmbedding = result.embedding?.values || [];
+              const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
+              // @ts-ignore
+              const result = await model.embedContent({
+                content: { parts: [{ text: userMessageText }] },
+                outputDimensionality: 768
+              });
+              const rawValues = result.embedding?.values || [];
+              queryEmbedding = rawValues.length > 768 ? rawValues.slice(0, 768) : rawValues;
             }
           }
 
