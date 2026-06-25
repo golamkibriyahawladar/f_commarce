@@ -90,6 +90,7 @@ export default function AIAgentsPage() {
   const [geminiKey, setGeminiKey] = useState('');
   const [modelsList, setModelsList] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [apiConnectionStatus, setApiConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'disconnected'>('idle');
   
   // 3. Pinecone Tab
   const [pineconeApiKey, setPineconeApiKey] = useState('');
@@ -180,6 +181,7 @@ export default function AIAgentsPage() {
   const syncModels = async (provider: 'openai' | 'gemini', apiKeyVal?: string, forceSelectFirst = false, currentModelName?: string, agentIdOverride?: string) => {
     if (!profile?.company_id) return;
     setLoadingModels(true);
+    setApiConnectionStatus('checking');
     try {
       const keyToUse = apiKeyVal !== undefined ? apiKeyVal : (provider === 'openai' ? openaiKey : geminiKey);
       const res = await fetch('/api/models', {
@@ -204,6 +206,9 @@ export default function AIAgentsPage() {
         if (forceSelectFirst || !data.models.includes(activeModel)) {
           setModelName(data.models[0]);
         }
+        setApiConnectionStatus('connected');
+      } else {
+        setApiConnectionStatus('disconnected');
       }
     } catch (err: any) {
       console.error('Error fetching models:', err?.message || err);
@@ -215,6 +220,7 @@ export default function AIAgentsPage() {
       if (forceSelectFirst || !fallbacks.includes(activeModel)) {
         setModelName(fallbacks[0]);
       }
+      setApiConnectionStatus('disconnected');
     } finally {
       setLoadingModels(false);
     }
@@ -223,6 +229,7 @@ export default function AIAgentsPage() {
   const handleOpenCreateModal = () => {
     setSelectedAgent(null);
     setModalTab('core');
+    setApiConnectionStatus('idle');
     
     // Core settings
     setAgentName('');
@@ -913,7 +920,31 @@ export default function AIAgentsPage() {
               {modalTab === 'model' && (
                 <div className="space-y-4 animate-in fade-in duration-150">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">LLM Provider</label>
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">LLM Provider</label>
+                      {apiConnectionStatus === 'connected' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
+                          Connected
+                        </span>
+                      )}
+                      {apiConnectionStatus === 'disconnected' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                          Not Connected
+                        </span>
+                      )}
+                      {apiConnectionStatus === 'checking' && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-650 border border-zinc-200">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-zinc-500" />
+                          Verifying...
+                        </span>
+                      )}
+                      {apiConnectionStatus === 'idle' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-50 text-zinc-450 border border-zinc-200">
+                          Idle
+                        </span>
+                      )}
+                    </div>
                     <select
                       value={llmProvider}
                       onChange={(e) => {
@@ -972,7 +1003,13 @@ export default function AIAgentsPage() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
                         <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom OpenAI Key (Optional)</label>
-                        <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                        {apiConnectionStatus === 'connected' ? (
+                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">✓ Connected</span>
+                        ) : apiConnectionStatus === 'disconnected' ? (
+                          <span className="text-[10px] text-red-500 font-bold flex items-center gap-0.5">✕ Not Connected</span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                        )}
                       </div>
                       <div className="relative">
                         <input 
@@ -996,7 +1033,13 @@ export default function AIAgentsPage() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
                         <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom Gemini API Key (Optional)</label>
-                        <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                        {apiConnectionStatus === 'connected' ? (
+                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">✓ Connected</span>
+                        ) : apiConnectionStatus === 'disconnected' ? (
+                          <span className="text-[10px] text-red-500 font-bold flex items-center gap-0.5">✕ Not Connected</span>
+                        ) : (
+                          <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                        )}
                       </div>
                       <div className="relative">
                         <input 
