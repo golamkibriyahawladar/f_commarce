@@ -1028,6 +1028,25 @@ export default function AIAgentsPage() {
                           {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      
+                      {/* Connect Button */}
+                      <div className="flex justify-end mt-2">
+                        <button
+                          type="button"
+                          onClick={() => syncModels('openai', openaiKey, true)}
+                          disabled={loadingModels}
+                          className="flex items-center gap-1 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {loadingModels ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Connecting...</span>
+                            </>
+                          ) : (
+                            <span>Connect API</span>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-1.5">
@@ -1056,6 +1075,25 @@ export default function AIAgentsPage() {
                           className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-705 cursor-pointer"
                         >
                           {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {/* Connect Button */}
+                      <div className="flex justify-end mt-2">
+                        <button
+                          type="button"
+                          onClick={() => syncModels('gemini', geminiKey, true)}
+                          disabled={loadingModels}
+                          className="flex items-center gap-1 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {loadingModels ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Connecting...</span>
+                            </>
+                          ) : (
+                            <span>Connect API</span>
+                          )}
                         </button>
                       </div>
                     </div>
