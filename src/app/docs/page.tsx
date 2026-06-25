@@ -709,9 +709,9 @@ if (\$_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <div className="p-4 bg-zinc-50 border border-zinc-150 rounded-xl space-y-2">
-                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">3. Multi-LLM Routing</h4>
+                      <h4 className="font-bold text-zinc-955 text-xs uppercase tracking-wider text-emerald-700">3. Multi-LLM Routing & Dynamic Sync</h4>
                       <p className="text-xs text-zinc-650 leading-relaxed">
-                        Assign agents to run completions via different models (e.g., <code>gpt-4o-mini</code>, <code>gpt-4o</code>, <code>gemini-1.5-pro</code>, <code>gemini-1.5-flash</code>). Agent prompts and configurations can be updated dynamically.
+                        Select from models retrieved dynamically from the provider APIs (via <code>/api/models</code>) using your specific credentials or global keys. Ensures automatic support for newly released models without code changes.
                       </p>
                     </div>
 
