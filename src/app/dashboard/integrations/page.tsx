@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
+import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 
 // FB SDK typing no longer needed — using server-side OAuth redirect
 
@@ -88,10 +89,8 @@ export default function IntegrationsPage() {
 
   // Confirm Dialog System
   const [confirmDialog, setConfirmDialog] = useState<{ visible: boolean; title: string; message: string; itemName: string; onConfirm: () => void }>({ visible: false, title: '', message: '', itemName: '', onConfirm: () => {} });
-  const [confirmInput, setConfirmInput] = useState('');
 
   const showConfirm = useCallback((title: string, message: string, itemName: string, onConfirm: () => void) => {
-    setConfirmInput('');
     setConfirmDialog({ visible: true, title, message, itemName, onConfirm });
   }, []);
 
@@ -786,74 +785,18 @@ export default function IntegrationsPage() {
       </div>
 
       {/* Confirm Dialog */}
-      {confirmDialog.visible && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-[420px] rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 pb-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 bg-red-50 rounded-xl border border-red-100">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-zinc-900">{confirmDialog.title}</h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">{confirmDialog.itemName}</p>
-                </div>
-              </div>
-              <p className="text-sm text-zinc-600 leading-relaxed mb-5">{confirmDialog.message}</p>
-              
-              <div className="p-3.5 bg-red-50/60 rounded-xl border border-red-100/80 mb-4">
-                <p className="text-xs text-red-800 leading-relaxed">
-                  To confirm, type <span className="font-mono font-bold bg-red-100 px-1.5 py-0.5 rounded text-red-900">DISCONNECT</span> in the box below:
-                </p>
-              </div>
-
-              <input
-                type="text"
-                value={confirmInput}
-                onChange={(e) => setConfirmInput(e.target.value)}
-                placeholder="Type DISCONNECT here..."
-                className={`w-full px-4 py-2.5 border-2 rounded-xl text-sm font-mono tracking-wider focus:outline-none transition-colors ${
-                  confirmInput === 'DISCONNECT' 
-                    ? 'border-red-500 bg-red-50/30 text-red-900 focus:border-red-600' 
-                    : 'border-zinc-200 bg-zinc-50 text-zinc-700 focus:border-zinc-400'
-                }`}
-                autoFocus
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </div>
-            <div className="flex gap-3 px-6 pb-6">
-              <button 
-                onClick={() => {
-                  setConfirmDialog(prev => ({ ...prev, visible: false }));
-                  setConfirmInput('');
-                }}
-                className="flex-1 py-2.5 px-4 border border-zinc-300 text-sm font-semibold text-zinc-700 rounded-xl hover:bg-zinc-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  if (confirmInput === 'DISCONNECT') {
-                    confirmDialog.onConfirm();
-                    setConfirmDialog(prev => ({ ...prev, visible: false }));
-                    setConfirmInput('');
-                  }
-                }}
-                disabled={confirmInput !== 'DISCONNECT'}
-                className={`flex-1 py-2.5 px-4 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
-                  confirmInput === 'DISCONNECT'
-                    ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer shadow-sm'
-                    : 'bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200'
-                }`}
-              >
-                <Trash2 className="w-4 h-4" />
-                Disconnect
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmationModal
+        isOpen={confirmDialog.visible}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, visible: false }))}
+        onConfirm={async () => {
+          await confirmDialog.onConfirm();
+          setConfirmDialog(prev => ({ ...prev, visible: false }));
+        }}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        itemName={confirmDialog.itemName}
+        confirmWord="DISCONNECT"
+      />
     </div>
   );
 }
