@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { triggerCompanyWebhooks } from './webhookDispatcher';
 import { Pinecone } from '@pinecone-database/pinecone';
-import { GoogleGenAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -144,11 +144,9 @@ export async function triggerAiReplyIfNeeded(
           } else if (embeddingProvider === 'gemini') {
             const geminiKey = credentials.gemini_key || globalSettings.global_openai_key;
             if (geminiKey) {
-              const ai = new GoogleGenAI({ apiKey: geminiKey });
-              const result = await ai.models.embedContent({
-                model: 'text-embedding-004',
-                contents: userMessageText
-              });
+              const genAI = new GoogleGenerativeAI(geminiKey);
+              const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+              const result = await model.embedContent(userMessageText);
               queryEmbedding = result.embedding?.values || [];
             }
           }
@@ -258,11 +256,14 @@ ${systemPrompt}`;
 
       modelUsed = credentials.model_name || 'gemini-1.5-flash';
 
-      const ai = new GoogleGenAI({ apiKey });
-      const model = ai.models.get({ model: modelUsed });
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ 
+        model: modelUsed,
+        systemInstruction: systemPrompt
+      });
 
       // Convert history to Gemini contents format
-      // systemPrompt is injected inside systemInstruction
+      // Gemini expects role to be 'user' or 'model'
       const contents = (history || []).map(msg => ({
         role: msg.sender_type === 'customer' ? 'user' : 'model',
         parts: [{ text: msg.content }]
@@ -272,7 +273,6 @@ ${systemPrompt}`;
 
       const result = await model.generateContent({
         contents,
-        systemInstruction: systemPrompt,
         generationConfig: { temperature: 0.7 }
       });
 

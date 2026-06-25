@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Pinecone } from '@pinecone-database/pinecone';
-import { GoogleGenAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Safely require third party libraries without TS type issues
 const pdfParse = require('pdf-parse');
@@ -273,14 +273,12 @@ export async function POST(req: Request) {
         throw new Error('Gemini API key missing. Please configure a custom key or set a global fallback key.');
       }
 
-      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
       
       // Call Google Gemini API to embed text chunks
       for (let i = 0; i < chunks.length; i++) {
-        const result = await ai.models.embedContent({
-          model: 'text-embedding-004',
-          contents: chunks[i],
-        });
+        const result = await model.embedContent(chunks[i]);
 
         if (result.embedding?.values) {
           vectors.push({
