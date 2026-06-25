@@ -879,14 +879,33 @@ export default function AIAgentsPage() {
 
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Model Name</label>
-                    <input 
-                      type="text" 
-                      placeholder={llmProvider === 'gemini' ? 'e.g. gemini-1.5-flash' : 'e.g. gpt-4o-mini'}
+                    <select
                       value={modelName}
                       onChange={(e) => setModelName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
-                      required
-                    />
+                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
+                    >
+                      {llmProvider === 'openai' ? (
+                        <>
+                          <option value="gpt-4o-mini">GPT-4o Mini (Default)</option>
+                          <option value="gpt-4o">GPT-4o</option>
+                          <option value="gpt-4">GPT-4</option>
+                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                          {modelName && !['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo'].includes(modelName) && (
+                            <option value={modelName}>{modelName} (Custom)</option>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Default)</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                          <option value="gemini-1.0-pro">Gemini 1.0 Pro</option>
+                          <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                          {modelName && !['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-2.0-flash-exp'].includes(modelName) && (
+                            <option value={modelName}>{modelName} (Custom)</option>
+                          )}
+                        </>
+                      )}
+                    </select>
                   </div>
 
                   {llmProvider === 'openai' ? (
