@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { triggerCompanyWebhooks } from './webhookDispatcher';
+import { Pinecone } from '@pinecone-database/pinecone';
+import { GoogleGenAI } from '@google/generative-ai';
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -7,14 +9,14 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
+// Helper to estimate token counts if api returns zero/null (safety fallback)
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
 /**
  * Triggers the AI Agent auto-response loop if the conversation has AI Autopilot enabled
  * and an active AI Agent is assigned to the channel integration.
- * 
- * @param companyId Workspace company ID
- * @param conversationId Conversation ID
- * @param integrationId Integration ID representing the incoming channel
- * @param userMessageText Content of the user's incoming message
  */
 export async function triggerAiReplyIfNeeded(
   companyId: string,
@@ -22,11 +24,22 @@ export async function triggerAiReplyIfNeeded(
   integrationId: string,
   userMessageText: string
 ) {
+  const startTime = Date.now();
+  const llmRuns: Array<{
+    run_index: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    execution_time_ms: number;
+    model: string;
+  }> = [];
+
   try {
     const supabase = getSupabase();
 
     // 1. Check if AI Autopilot is enabled on this conversation
     const { data: conv, error: convErr } = await supabase
+      .from('conversations')
       .from('conversations')
       .select('*')
       .eq('id', conversationId)
@@ -65,16 +78,18 @@ export async function triggerAiReplyIfNeeded(
       return;
     }
 
-    const agentName = assignedAgent.credentials?.name || 'AI Assistant';
-    const systemPrompt = assignedAgent.credentials?.system_prompt || 'You are a helpful customer support assistant.';
-    const apiKey = assignedAgent.credentials?.openai_key || process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-      console.error(`AI Agent '${agentName}' configuration error: Missing OpenAI API Key.`);
-      return;
-    }
-
-    console.log(`AI Agent '${agentName}' executing auto-reply for conversation ${conversationId}...`);
+    const credentials = assignedAgent.credentials || {};
+    const agentName = credentials.name || 'AI Assistant';
+    let systemPrompt = credentials.system_prompt || 'You are a helpful customer support assistant.';
+    const llmProvider = credentials.llm_provider || 'openai';
+    
+    // Fetch global fallbacks
+    const { data: systemCompany } = await supabase
+      .from('companies')
+      .select('settings')
+      .eq('slug', 'system-admin')
+      .maybeSingle();
+    const globalSettings = systemCompany?.settings || {};
 
     // 3. Fetch the last 10 messages of the conversation for chat context
     const { data: history, error: historyErr } = await supabase
@@ -89,44 +104,203 @@ export async function triggerAiReplyIfNeeded(
       return;
     }
 
-    // Map history to OpenAI message structures
-    const openAiMessages = [
-      { role: 'system', content: systemPrompt },
-      ...(history || []).map(msg => ({
-        role: msg.sender_type === 'customer' ? 'user' : 'assistant',
-        content: msg.content
-      }))
-    ];
+    // 4. RAG integration: if "search_knowledge_base" is active, query Pinecone
+    const activeTools = credentials.active_tools || [];
+    let ragContext = '';
 
-    // 4. Request completion from OpenAI
-    const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Lightweight, fast, and smart model for customer DMs
-        messages: openAiMessages,
-        temperature: 0.7
-      })
-    });
+    if (activeTools.includes('search_knowledge_base')) {
+      const pineconeApiKey = credentials.pinecone_api_key;
+      const pineconeIndex = credentials.pinecone_index;
+      const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${assignedAgent.id}`;
+      const embeddingProvider = credentials.embedding_provider || 'openai';
 
-    if (!openAiRes.ok) {
-      const openAiError = await openAiRes.json();
-      console.error('OpenAI API Error:', openAiError);
-      return;
+      if (pineconeApiKey && pineconeIndex) {
+        try {
+          console.log(`AI Agent '${agentName}' performing RAG search on Pinecone (Namespace: ${pineconeNamespace})...`);
+          let queryEmbedding: number[] = [];
+
+          // Generate embedding for query
+          if (embeddingProvider === 'openai') {
+            const openaiKey = credentials.openai_key || globalSettings.global_openai_key;
+            if (openaiKey) {
+              const embRes = await fetch('https://api.openai.com/v1/embeddings', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${openaiKey}`
+                },
+                body: JSON.stringify({
+                  model: 'text-embedding-3-small',
+                  input: userMessageText
+                })
+              });
+              if (embRes.ok) {
+                const embData = await embRes.json();
+                queryEmbedding = embData.data?.[0]?.embedding || [];
+              } else {
+                console.error('OpenAI query embedding error:', embRes.statusText);
+              }
+            }
+          } else if (embeddingProvider === 'gemini') {
+            const geminiKey = credentials.gemini_key || globalSettings.global_openai_key;
+            if (geminiKey) {
+              const ai = new GoogleGenAI({ apiKey: geminiKey });
+              const result = await ai.models.embedContent({
+                model: 'text-embedding-004',
+                contents: userMessageText
+              });
+              queryEmbedding = result.embedding?.values || [];
+            }
+          }
+
+          // Query Pinecone
+          if (queryEmbedding.length > 0) {
+            const pc = new Pinecone({ apiKey: pineconeApiKey });
+            const index = pc.Index(pineconeIndex);
+            
+            const queryResponse = await index.namespace(pineconeNamespace).query({
+              vector: queryEmbedding,
+              topK: 4,
+              includeMetadata: true
+            });
+
+            const matchedTexts = (queryResponse.matches || [])
+              .map(match => match.metadata?.text as string)
+              .filter(Boolean);
+
+            if (matchedTexts.length > 0) {
+              ragContext = matchedTexts.join('\n\n');
+              console.log(`RAG Search succeeded. Found ${matchedTexts.length} matching text chunks.`);
+            }
+          }
+        } catch (ragErr) {
+          console.error('RAG vector search failed:', ragErr);
+        }
+      }
     }
 
-    const openAiData = await openAiRes.json();
-    const aiReplyText = openAiData.choices?.[0]?.message?.content?.trim();
+    // Inject RAG context into prompt if found
+    if (ragContext) {
+      systemPrompt = `Use the following knowledge base context to answer the user's questions truthfully. If the context doesn't contain the answer, reply based on your general knowledge but mention the limitations.
+
+=== KNOWLEDGE BASE CONTEXT ===
+${ragContext}
+==============================
+
+System instructions:
+${systemPrompt}`;
+    }
+
+    // 5. Query LLM and calculate token/performance telemetry
+    let aiReplyText = '';
+    let modelUsed = '';
+
+    if (llmProvider === 'openai') {
+      const apiKey = credentials.openai_key || globalSettings.global_openai_key;
+      if (!apiKey) {
+        console.error(`AI Agent '${agentName}' configuration error: Missing OpenAI API Key.`);
+        return;
+      }
+
+      modelUsed = credentials.model_name || 'gpt-4o-mini';
+
+      // Map history to OpenAI message structures
+      const openAiMessages = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).map(msg => ({
+          role: msg.sender_type === 'customer' ? 'user' : 'assistant',
+          content: msg.content
+        }))
+      ];
+
+      const runStartTime = Date.now();
+
+      const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelUsed,
+          messages: openAiMessages,
+          temperature: 0.7
+        })
+      });
+
+      const executionTime = Date.now() - runStartTime;
+
+      if (!openAiRes.ok) {
+        const openAiError = await openAiRes.json();
+        console.error('OpenAI API Error:', openAiError);
+        return;
+      }
+
+      const openAiData = await openAiRes.json();
+      aiReplyText = openAiData.choices?.[0]?.message?.content?.trim() || '';
+      
+      const usage = openAiData.usage || {};
+      llmRuns.push({
+        run_index: 0,
+        prompt_tokens: usage.prompt_tokens || estimateTokens(systemPrompt),
+        completion_tokens: usage.completion_tokens || estimateTokens(aiReplyText),
+        total_tokens: usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens),
+        execution_time_ms: executionTime,
+        model: modelUsed
+      });
+
+    } else if (llmProvider === 'gemini') {
+      const apiKey = credentials.gemini_key || globalSettings.global_openai_key; // fallback
+      if (!apiKey) {
+        console.error(`AI Agent '${agentName}' configuration error: Missing Gemini API Key.`);
+        return;
+      }
+
+      modelUsed = credentials.model_name || 'gemini-1.5-flash';
+
+      const ai = new GoogleGenAI({ apiKey });
+      const model = ai.models.get({ model: modelUsed });
+
+      // Convert history to Gemini contents format
+      // systemPrompt is injected inside systemInstruction
+      const contents = (history || []).map(msg => ({
+        role: msg.sender_type === 'customer' ? 'user' : 'model',
+        parts: [{ text: msg.content }]
+      }));
+
+      const runStartTime = Date.now();
+
+      const result = await model.generateContent({
+        contents,
+        systemInstruction: systemPrompt,
+        generationConfig: { temperature: 0.7 }
+      });
+
+      const executionTime = Date.now() - runStartTime;
+
+      aiReplyText = result.response?.text()?.trim() || '';
+
+      const usageMetadata = result.response?.usageMetadata || {};
+      const promptTokens = usageMetadata.promptTokenCount || estimateTokens(systemPrompt);
+      const completionTokens = usageMetadata.candidatesTokenCount || estimateTokens(aiReplyText);
+      const totalTokens = usageMetadata.totalTokenCount || (promptTokens + completionTokens);
+
+      llmRuns.push({
+        run_index: 0,
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+        execution_time_ms: executionTime,
+        model: modelUsed
+      });
+    }
 
     if (!aiReplyText) {
-      console.error('OpenAI returned an empty reply.');
+      console.error('LLM returned an empty reply.');
       return;
     }
 
-    // 5. Fetch integration details to determine routing back to the user
+    // 6. Fetch integration details to determine routing back to the user
     const { data: integration, error: intErr } = await supabase
       .from('integrations')
       .select('*')
@@ -138,7 +312,7 @@ export async function triggerAiReplyIfNeeded(
       return;
     }
 
-    // 6. Route reply to the correct channel
+    // 7. Route reply to the correct channel
     if (integration.provider === 'facebook') {
       const pageAccessToken = integration.credentials?.access_token;
       if (!pageAccessToken) {
@@ -146,7 +320,6 @@ export async function triggerAiReplyIfNeeded(
         return;
       }
 
-      // Call Meta Send API to reply to the user DM
       const metaRes = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${pageAccessToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -162,15 +335,33 @@ export async function triggerAiReplyIfNeeded(
         return;
       }
       console.log('AI reply sent successfully to Facebook Page DM.');
-    } else if (integration.provider === 'webhook') {
-      // For custom incoming webhooks, we don't have a direct API back,
-      // so we dispatch the AI reply to their registered outgoing webhook URL!
-      console.log('AI reply routed for custom webhook source. Triggering outgoing webhook...');
     } else {
       console.log(`Mocking AI reply routing for channel provider: ${integration.provider}`);
     }
 
-    // 7. Save the AI reply message to the database
+    // Compute aggregated usage statistics
+    const totalPromptTokens = llmRuns.reduce((sum, run) => sum + run.prompt_tokens, 0);
+    const totalCompletionTokens = llmRuns.reduce((sum, run) => sum + run.completion_tokens, 0);
+    const totalTokens = llmRuns.reduce((sum, run) => sum + run.total_tokens, 0);
+    const totalResponseTime = Date.now() - startTime;
+
+    const executionStats = {
+      chat_info: {
+        session_id: conversationId
+      },
+      usage: {
+        prompt_tokens: totalPromptTokens,
+        completion_tokens: totalCompletionTokens,
+        total_tokens: totalTokens
+      },
+      performance: {
+        model_used: modelUsed,
+        response_time_ms: totalResponseTime,
+        llm_runs: llmRuns
+      }
+    };
+
+    // 8. Save the AI reply message to the database (including telemetry stats in metadata)
     const { data: savedMsg, error: saveErr } = await supabase
       .from('messages')
       .insert({
@@ -179,7 +370,10 @@ export async function triggerAiReplyIfNeeded(
         sender_type: 'ai',
         message_type: 'text',
         content: aiReplyText,
-        metadata: { sent_by_ai_agent: agentName }
+        metadata: { 
+          sent_by_ai_agent: agentName,
+          execution_stats: executionStats
+        }
       })
       .select()
       .single();
@@ -189,7 +383,7 @@ export async function triggerAiReplyIfNeeded(
       return;
     }
 
-    // 8. Update conversation last message status
+    // 9. Update conversation last message status
     await supabase
       .from('conversations')
       .update({
@@ -198,10 +392,10 @@ export async function triggerAiReplyIfNeeded(
       })
       .eq('id', conversationId);
 
-    // 9. Trigger company webhooks so external client receives the AI reply event
+    // 10. Trigger company webhooks so external client receives the AI reply event
     await triggerCompanyWebhooks(companyId, 'message.created', savedMsg);
 
-    console.log('AI agent auto-reply loop completed successfully.');
+    console.log('AI agent auto-reply loop completed successfully with stats:', JSON.stringify(executionStats));
   } catch (error) {
     console.error('triggerAiReplyIfNeeded failed:', error);
   }
