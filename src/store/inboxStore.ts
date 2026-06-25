@@ -7,6 +7,7 @@ export interface Message {
   sender_type: 'customer' | 'agent' | 'system' | 'ai';
   message_type: 'text' | 'image' | 'video' | 'document' | 'comment';
   content: string;
+  metadata?: any;
   created_at: string;
 }
 
