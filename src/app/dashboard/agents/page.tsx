@@ -21,7 +21,13 @@ import {
   Key,
   ShieldCheck,
   Eye,
-  EyeOff
+  EyeOff,
+  Database,
+  FileText,
+  Tool,
+  UploadCloud,
+  FileUp,
+  Cpu
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
@@ -34,12 +40,30 @@ interface Integration {
   credentials: {
     name?: string;
     system_prompt?: string;
+    llm_provider?: 'openai' | 'gemini';
+    model_name?: string;
     openai_key?: string;
+    gemini_key?: string;
+    pinecone_api_key?: string;
+    pinecone_index?: string;
+    pinecone_namespace?: string;
+    embedding_provider?: 'openai' | 'gemini';
+    active_tools?: string[];
     assigned_integrations?: string[];
     [key: string]: any;
   };
   webhook_url?: string;
   status: 'active' | 'inactive' | 'error';
+  created_at: string;
+}
+
+interface KBFile {
+  id: string;
+  file_name: string;
+  size_bytes: number;
+  chunk_count: number;
+  status: 'processing' | 'completed' | 'error';
+  embedding_provider: 'openai' | 'gemini';
   created_at: string;
 }
 
@@ -52,13 +76,38 @@ export default function AIAgentsPage() {
   // Form State
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Integration | null>(null);
+  const [modalTab, setModalTab] = useState<'core' | 'model' | 'pinecone' | 'kb' | 'tools'>('core');
+  
+  // 1. Core Tab
   const [agentName, setAgentName] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [assignedChannelIds, setAssignedChannelIds] = useState<string[]>([]);
   const [agentStatus, setAgentStatus] = useState<'active' | 'inactive'>('active');
+  const [assignedChannelIds, setAssignedChannelIds] = useState<string[]>([]);
+  
+  // 2. Model Tab
+  const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini'>('openai');
+  const [modelName, setModelName] = useState('');
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  
+  // 3. Pinecone Tab
+  const [pineconeApiKey, setPineconeApiKey] = useState('');
+  const [pineconeIndex, setPineconeIndex] = useState('');
+  const [pineconeNamespace, setPineconeNamespace] = useState('');
+  const [embeddingProvider, setEmbeddingProvider] = useState<'openai' | 'gemini'>('openai');
+  
+  // 4. Knowledge Base Tab
+  const [kbFiles, setKbFiles] = useState<KBFile[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  
+  // 5. Tools Tab
+  const [activeTools, setActiveTools] = useState<string[]>([]);
+
   const [saving, setSaving] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showPineconeKey, setShowPineconeKey] = useState(false);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning'; visible: boolean }>({ message: '', type: 'success', visible: false });
@@ -76,7 +125,6 @@ export default function AIAgentsPage() {
     if (!profile?.company_id) return;
     setLoading(true);
     try {
-      // Fetch all integrations for the company
       const { data: ints, error: intsErr } = await supabase
         .from('integrations')
         .select('*')
@@ -84,8 +132,6 @@ export default function AIAgentsPage() {
       if (intsErr) throw intsErr;
 
       const loadedIntegrations = ints || [];
-      
-      // Separate AI Agents and actual communications channels
       const aiAgents = loadedIntegrations.filter(i => i.provider === 'ai_agent');
       const communicationChannels = loadedIntegrations.filter(i => i.provider !== 'ai_agent');
 
@@ -105,26 +151,95 @@ export default function AIAgentsPage() {
     }
   }, [profile?.company_id]);
 
+  // Load KB Files
+  const fetchKbFiles = async (agentId: string) => {
+    if (!profile?.company_id) return;
+    setLoadingFiles(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      const res = await fetch(`/api/knowledge-base?agentId=${agentId}&companyId=${profile.company_id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!res.ok) throw new Error('Failed to load knowledge base files.');
+      const data = await res.json();
+      setKbFiles(data.files || []);
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to load RAG files: ' + err.message, 'error');
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setSelectedAgent(null);
+    setModalTab('core');
+    
+    // Core settings
     setAgentName('');
     setSystemPrompt('You are a helpful customer support assistant for our store. Answer questions politely and concisely.');
-    setOpenaiKey('');
-    setAssignedChannelIds([]);
     setAgentStatus('active');
+    setAssignedChannelIds([]);
+    
+    // Model settings
+    setLlmProvider('openai');
+    setModelName('gpt-4o-mini');
+    setOpenaiKey('');
+    setGeminiKey('');
+    
+    // Pinecone settings
+    setPineconeApiKey('');
+    setPineconeIndex('');
+    setPineconeNamespace('');
+    setEmbeddingProvider('openai');
+    
+    // Files and tools
+    setKbFiles([]);
+    setActiveTools([]);
+    
     setShowKey(false);
     setModalOpen(true);
   };
 
   const handleOpenEditModal = (agent: Integration) => {
     setSelectedAgent(agent);
-    setAgentName(agent.credentials.name || '');
-    setSystemPrompt(agent.credentials.system_prompt || '');
-    // Mask key if exists, else empty
-    setOpenaiKey(agent.credentials.openai_key ? '••••••••' : '');
-    setAssignedChannelIds(agent.credentials.assigned_integrations || []);
+    setModalTab('core');
+    
+    const creds = agent.credentials || {};
+    
+    // Core settings
+    setAgentName(creds.name || '');
+    setSystemPrompt(creds.system_prompt || '');
     setAgentStatus(agent.status === 'active' ? 'active' : 'inactive');
+    setAssignedChannelIds(creds.assigned_integrations || []);
+    
+    // Model settings
+    setLlmProvider(creds.llm_provider || 'openai');
+    setModelName(creds.model_name || (creds.llm_provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'));
+    setOpenaiKey(creds.openai_key ? '••••••••' : '');
+    setGeminiKey(creds.gemini_key ? '••••••••' : '');
+    
+    // Pinecone settings
+    setPineconeApiKey(creds.pinecone_api_key ? '••••••••' : '');
+    setPineconeIndex(creds.pinecone_index || '');
+    setPineconeNamespace(creds.pinecone_namespace || '');
+    setEmbeddingProvider(creds.embedding_provider || 'openai');
+    
+    // Tools
+    setActiveTools(creds.active_tools || []);
+    
     setShowKey(false);
+    setShowGeminiKey(false);
+    setShowPineconeKey(false);
+    
+    // Fetch files in background
+    fetchKbFiles(agent.id);
+    
     setModalOpen(true);
   };
 
@@ -134,6 +249,87 @@ export default function AIAgentsPage() {
         ? prev.filter(id => id !== channelId)
         : [...prev, channelId]
     );
+  };
+
+  const handleToggleTool = (toolId: string) => {
+    setActiveTools(prev => 
+      prev.includes(toolId)
+        ? prev.filter(id => id !== toolId)
+        : [...prev, toolId]
+    );
+  };
+
+  // KB File Upload Handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !selectedAgent || !profile?.company_id) return;
+    
+    const file = files[0];
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!['pdf', 'docx', 'md', 'txt'].includes(extension || '')) {
+      showToast('Unsupported file type. Supported formats: .pdf, .docx, .md, .txt', 'warning');
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('companyId', profile.company_id);
+      formData.append('agentId', selectedAgent.id);
+
+      const res = await fetch('/api/knowledge-base', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to upload document.');
+      }
+
+      showToast(`Document '${file.name}' parsed and ingested successfully.`, 'success');
+      await fetchKbFiles(selectedAgent.id);
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message, 'error');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  // KB File Delete Handler
+  const handleFileDelete = async (fileId: string) => {
+    if (!confirm('Are you sure you want to delete this document from RAG storage? This will purge all associated vectors.') || !selectedAgent || !profile?.company_id) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch(`/api/knowledge-base?fileId=${fileId}&companyId=${profile.company_id}&agentId=${selectedAgent.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete file.');
+      }
+
+      showToast('Document purged successfully.', 'success');
+      await fetchKbFiles(selectedAgent.id);
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message, 'error');
+    }
   };
 
   const handleSaveAgent = async (e: React.FormEvent) => {
@@ -151,16 +347,32 @@ export default function AIAgentsPage() {
     setSaving(true);
 
     try {
-      // Determine final API Key
-      let finalApiKey = openaiKey;
+      // Determine keys (use past values if masked)
+      let finalOpenaiKey = openaiKey;
       if (selectedAgent && openaiKey === '••••••••') {
-        finalApiKey = selectedAgent.credentials.openai_key || '';
+        finalOpenaiKey = selectedAgent.credentials.openai_key || '';
+      }
+      let finalGeminiKey = geminiKey;
+      if (selectedAgent && geminiKey === '••••••••') {
+        finalGeminiKey = selectedAgent.credentials.gemini_key || '';
+      }
+      let finalPineconeKey = pineconeApiKey;
+      if (selectedAgent && pineconeApiKey === '••••••••') {
+        finalPineconeKey = selectedAgent.credentials.pinecone_api_key || '';
       }
 
       const credentials = {
         name: agentName.trim(),
         system_prompt: systemPrompt.trim(),
-        openai_key: finalApiKey.trim(),
+        llm_provider: llmProvider,
+        model_name: modelName || (llmProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'),
+        openai_key: finalOpenaiKey.trim(),
+        gemini_key: finalGeminiKey.trim(),
+        pinecone_api_key: finalPineconeKey.trim(),
+        pinecone_index: pineconeIndex.trim(),
+        pinecone_namespace: pineconeNamespace.trim(),
+        embedding_provider: embeddingProvider,
+        active_tools: activeTools,
         assigned_integrations: assignedChannelIds
       };
 
@@ -184,7 +396,7 @@ export default function AIAgentsPage() {
           .insert({
             company_id: profile.company_id,
             provider: 'ai_agent',
-            type: 'webhook', // Supported check constraint type
+            type: 'webhook',
             credentials,
             status: agentStatus
           });
@@ -277,7 +489,7 @@ export default function AIAgentsPage() {
         {isAdmin && (
           <button
             onClick={handleOpenCreateModal}
-            className="flex items-center justify-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4.5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/10 active:scale-95 duration-200"
+            className="flex items-center justify-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4.5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-emerald-600/10 active:scale-95 duration-200 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Create AI Agent
@@ -312,7 +524,7 @@ export default function AIAgentsPage() {
           {isAdmin && (
             <button
               onClick={handleOpenCreateModal}
-              className="mt-4 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/70 font-semibold px-4 py-2 rounded-xl transition-all"
+              className="mt-4 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/70 font-semibold px-4 py-2 rounded-xl transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Configure First Agent
@@ -337,7 +549,7 @@ export default function AIAgentsPage() {
                     <div className="flex items-center gap-3">
                       <div className={`p-2.5 rounded-xl border shrink-0 ${
                         agent.status === 'active' 
-                          ? 'bg-emerald-55 border-emerald-205 text-emerald-700' 
+                          ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
                           : 'bg-zinc-100 border-zinc-200 text-zinc-500'
                       }`}>
                         <Bot className="w-5 h-5" />
@@ -360,7 +572,7 @@ export default function AIAgentsPage() {
                       <button 
                         onClick={() => handleToggleStatus(agent)}
                         title={agent.status === 'active' ? 'Deactivate Agent' : 'Activate Agent'}
-                        className={`p-1.5 rounded-lg border transition-all ${
+                        className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                           agent.status === 'active' 
                             ? 'hover:bg-amber-50 border-zinc-200 text-zinc-500 hover:text-amber-700 hover:border-amber-200' 
                             : 'hover:bg-emerald-50 border-zinc-200 text-zinc-500 hover:text-emerald-700 hover:border-emerald-200'
@@ -373,14 +585,14 @@ export default function AIAgentsPage() {
                           <button 
                             onClick={() => handleOpenEditModal(agent)}
                             title="Edit Agent settings"
-                            className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-zinc-500 hover:text-zinc-800 transition-all"
+                            className="p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-50 text-zinc-500 hover:text-zinc-800 transition-all cursor-pointer"
                           >
                             <Settings2 className="w-3.5 h-3.5" />
                           </button>
                           <button 
                             onClick={() => handleDeleteAgent(agent)}
                             title="Delete Agent"
-                            className="p-1.5 rounded-lg border border-zinc-200 hover:bg-red-50 text-zinc-500 hover:text-red-600 hover:border-red-200 transition-all"
+                            className="p-1.5 rounded-lg border border-zinc-200 hover:bg-red-50 text-zinc-500 hover:text-red-600 hover:border-red-200 transition-all cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -394,19 +606,37 @@ export default function AIAgentsPage() {
                 <div className="p-5 flex-1 space-y-4 text-xs">
                   <div>
                     <span className="block text-zinc-400 font-bold uppercase tracking-wider text-[9px] mb-1.5">System Prompt</span>
-                    <p className="text-zinc-650 line-clamp-3 bg-zinc-50/80 border border-zinc-150 p-2.5 rounded-xl italic leading-relaxed text-[11px]">
+                    <p className="text-zinc-600 line-clamp-3 bg-zinc-50/80 border border-zinc-150 p-2.5 rounded-xl italic leading-relaxed text-[11px]">
                       "{agent.credentials?.system_prompt}"
                     </p>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4 border-t border-b border-zinc-100 py-3">
+                    <div>
+                      <span className="block text-zinc-450 font-bold uppercase text-[9px] mb-1">Model Provider</span>
+                      <span className="text-[11px] font-bold text-zinc-700 capitalize flex items-center gap-1">
+                        <Cpu className="w-3.5 h-3.5 text-zinc-500" />
+                        {agent.credentials?.llm_provider || 'OpenAI'} ({agent.credentials?.model_name || 'gpt-4o-mini'})
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-zinc-450 font-bold uppercase text-[9px] mb-1">RAG Search</span>
+                      <span className={`text-[11px] font-bold ${
+                        agent.credentials?.active_tools?.includes('search_knowledge_base') ? 'text-emerald-600' : 'text-zinc-400'
+                      }`}>
+                        {agent.credentials?.active_tools?.includes('search_knowledge_base') ? '✓ Active' : '✕ Disabled'}
+                      </span>
+                    </div>
+                  </div>
+
                   <div>
-                    <span className="block text-zinc-400 font-bold uppercase tracking-wider text-[9px] mb-1.5">API Key Authentication</span>
+                    <span className="block text-zinc-400 font-bold uppercase tracking-wider text-[9px] mb-1.5">API Key Status</span>
                     <div className="flex items-center gap-1.5 text-zinc-500">
                       <Key className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                      {agent.credentials?.openai_key ? (
+                      {agent.credentials?.openai_key || agent.credentials?.gemini_key ? (
                         <span className="text-[11px] font-medium flex items-center gap-1 text-emerald-700">
                           <ShieldCheck className="w-3.5 h-3.5" />
-                          Custom OpenAI Key Loaded
+                          Custom Key Loaded
                         </span>
                       ) : (
                         <span className="text-[11px] italic text-zinc-450">
@@ -444,183 +674,509 @@ export default function AIAgentsPage() {
         </div>
       )}
 
-      {/* Add / Edit Agent Modal */}
+      {/* Dynamic Tabbed Agent Editor Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
           <form 
             onSubmit={handleSaveAgent}
-            className="bg-white w-full max-w-xl rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+            className="bg-white w-full max-w-2xl rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
           >
-            {/* Header */}
+            {/* Modal Header */}
             <div className="flex justify-between items-center p-5 border-b border-zinc-150 shrink-0 bg-zinc-50/50">
               <div className="flex items-center gap-2">
                 <Brain className="w-5.5 h-5.5 text-emerald-600" />
                 <h3 className="text-lg font-bold text-zinc-900">
-                  {selectedAgent ? 'Edit AI Agent Settings' : 'Create AI Agent'}
+                  {selectedAgent ? 'Configure AI Agent Assistant' : 'Create AI Agent'}
                 </h3>
               </div>
               <button 
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="p-1 text-zinc-455 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-all"
+                className="p-1 text-zinc-400 hover:text-zinc-650 hover:bg-zinc-100 rounded-lg transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Navigation Tabs (Inline Menu) */}
+            <div className="flex border-b border-zinc-200 bg-zinc-50/20 px-3 shrink-0 overflow-x-auto gap-1">
+              <button
+                type="button"
+                onClick={() => setModalTab('core')}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                  modalTab === 'core' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                Core Settings
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('model')}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                  modalTab === 'model' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                LLM settings
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('pinecone')}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                  modalTab === 'pinecone' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                Vector Database
+              </button>
+              {selectedAgent && (
+                <button
+                  type="button"
+                  onClick={() => setModalTab('kb')}
+                  className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                    modalTab === 'kb' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  Knowledge Base (RAG)
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setModalTab('tools')}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                  modalTab === 'tools' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                Action Tools
               </button>
             </div>
 
             {/* Scrollable Body */}
             <div className="p-6 overflow-y-auto flex-1 space-y-5 text-sm">
               
-              {/* Agent Name */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">AI Agent Name</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. E-Commerce Support Bot"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-zinc-800 text-xs placeholder-zinc-400 transition-colors"
-                  required
-                />
-              </div>
-
-              {/* System Instructions / Prompt */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">System Instructions / Prompt</label>
-                  <span className="text-[10px] text-zinc-400 font-semibold">Teaches the AI how to act</span>
-                </div>
-                <textarea 
-                  rows={4}
-                  placeholder="Write clear rules. E.g. 'You are a customer agent. Answer nicely. If they ask about orders, fetch order tracking...'"
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-zinc-800 text-xs placeholder-zinc-400 transition-colors resize-none font-mono"
-                  required
-                />
-              </div>
-
-              {/* OpenAI Key */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">OpenAI API Key (Optional)</label>
-                  <span className="text-[10px] text-zinc-400 font-medium">Falls back to server standard env key if empty</span>
-                </div>
-                <div className="relative">
-                  <input 
-                    type={showKey ? 'text' : 'password'} 
-                    placeholder="sk-..."
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
-                    className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white text-zinc-800 text-xs placeholder-zinc-400 transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-2.5 text-zinc-450 hover:text-zinc-700"
-                  >
-                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Channels Selector */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Deploy to Communication Channels</label>
-                
-                {channels.length === 0 ? (
-                  <div className="bg-zinc-50 border border-zinc-150 rounded-xl p-4 text-center">
-                    <p className="text-zinc-500 text-xs">No social or webhook integrations connected yet.</p>
-                    <p className="text-zinc-400 text-[10px] mt-0.5">Please hook up integrations in the Settings page first.</p>
+              {/* TAB 1: CORE DETAILS */}
+              {modalTab === 'core' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">AI Agent Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Omnichannel Support Bot"
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                      required
+                    />
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto pr-1">
-                    {channels.map((chan) => {
-                      const details = getChannelDetails(chan);
-                      const isSelected = assignedChannelIds.includes(chan.id);
 
-                      return (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">System Instructions / Prompt</label>
+                      <span className="text-[10px] text-zinc-400 font-semibold">Teaches the AI how to act</span>
+                    </div>
+                    <textarea 
+                      rows={5}
+                      placeholder="Provide rules. E.g. 'You are a helpdesk assistant. Answer nicely. Keep responses under 2 sentences...'"
+                      value={systemPrompt}
+                      onChange={(e) => setSystemPrompt(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono transition-colors resize-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Deploy Channels Selector */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Deploy to Communication Channels</label>
+                    {channels.length === 0 ? (
+                      <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-center">
+                        <p className="text-zinc-500 text-xs">No active social or webhook channels linked yet.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto pr-1">
+                        {channels.map((chan) => {
+                          const details = getChannelDetails(chan);
+                          const isSelected = assignedChannelIds.includes(chan.id);
+
+                          return (
+                            <button
+                              key={chan.id}
+                              type="button"
+                              onClick={() => handleToggleChannel(chan.id)}
+                              className={`flex items-center justify-between p-2.5 border rounded-xl transition-all text-left active:scale-[0.98] duration-150 cursor-pointer ${
+                                isSelected 
+                                  ? 'border-emerald-500 bg-emerald-50/10'
+                                  : 'border-zinc-200 hover:border-zinc-350 hover:bg-zinc-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={`p-1.5 rounded-lg border ${
+                                  isSelected ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-zinc-50 border-zinc-100 text-zinc-500'
+                                }`}>
+                                  {details.icon}
+                                </div>
+                                <span className="font-semibold text-xs text-zinc-800 truncate pr-2">{details.title}</span>
+                              </div>
+                              <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                                isSelected ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-zinc-300 bg-white'
+                              }`}>
+                                {isSelected && <span className="text-[9px]">✓</span>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">Agent Status</label>
+                      <p className="text-zinc-400 text-[10px] mt-0.5">Toggle whether the autopilot responder is online.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAgentStatus('active')}
+                        className={`px-4 py-1.5 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                          agentStatus === 'active'
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                            : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                        }`}
+                      >
+                        Active
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAgentStatus('inactive')}
+                        className={`px-4 py-1.5 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                          agentStatus === 'inactive'
+                            ? 'bg-zinc-800 border-zinc-850 text-white shadow-sm'
+                            : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                        }`}
+                      >
+                        Inactive
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: MODEL SETTINGS */}
+              {modalTab === 'model' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">LLM Provider</label>
+                    <select
+                      value={llmProvider}
+                      onChange={(e) => {
+                        const prov = e.target.value as 'openai' | 'gemini';
+                        setLlmProvider(prov);
+                        setModelName(prov === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini');
+                      }}
+                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
+                    >
+                      <option value="openai">OpenAI (GPT Models)</option>
+                      <option value="gemini">Google Gemini</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Model Name</label>
+                    <input 
+                      type="text" 
+                      placeholder={llmProvider === 'gemini' ? 'e.g. gemini-1.5-flash' : 'e.g. gpt-4o-mini'}
+                      value={modelName}
+                      onChange={(e) => setModelName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                      required
+                    />
+                  </div>
+
+                  {llmProvider === 'openai' ? (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom OpenAI Key (Optional)</label>
+                        <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                      </div>
+                      <div className="relative">
+                        <input 
+                          type={showKey ? 'text' : 'password'} 
+                          placeholder="sk-proj-..."
+                          value={openaiKey}
+                          onChange={(e) => setOpenaiKey(e.target.value)}
+                          className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
+                        />
                         <button
-                          key={chan.id}
                           type="button"
-                          onClick={() => handleToggleChannel(chan.id)}
-                          className={`flex items-center justify-between p-2.5 border rounded-xl transition-all text-left active:scale-[0.98] duration-150 ${
-                            isSelected 
-                              ? 'border-emerald-500 bg-emerald-50/15'
-                              : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
-                          }`}
+                          onClick={() => setShowKey(!showKey)}
+                          className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-700 cursor-pointer"
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className={`p-1.5 rounded-lg border ${
-                              isSelected ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-zinc-50 border-zinc-100 text-zinc-500'
-                            }`}>
-                              {details.icon}
-                            </div>
-                            <span className="font-semibold text-xs text-zinc-800 truncate pr-2">{details.title}</span>
-                          </div>
-
-                          <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                            isSelected ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-zinc-300 bg-white'
-                          }`}>
-                            {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
-                          </div>
+                          {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom Gemini API Key (Optional)</label>
+                        <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                      </div>
+                      <div className="relative">
+                        <input 
+                          type={showGeminiKey ? 'text' : 'password'} 
+                          placeholder="AIzaSy..."
+                          value={geminiKey}
+                          onChange={(e) => setGeminiKey(e.target.value)}
+                          className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-705 cursor-pointer"
+                        >
+                          {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* Status Selector */}
-              <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">Agent Status</label>
-                  <p className="text-zinc-400 text-[10px] mt-0.5">Toggle whether the agent is active and running.</p>
+              {/* TAB 3: PINECONE VECTOR DATABASE */}
+              {modalTab === 'pinecone' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-zinc-50 border border-zinc-200/80 rounded-xl p-4 flex items-start gap-2.5">
+                    <Database className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="text-xs leading-relaxed text-zinc-650">
+                      <p className="font-bold text-zinc-800 mb-0.5">Custom Vector Database Settings</p>
+                      Enter your Pinecone credentials to enable vector document similarity lookup. Standard namespaces will separate files across agents automatically.
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone API Key</label>
+                    <div className="relative">
+                      <input 
+                        type={showPineconeKey ? 'text' : 'password'} 
+                        placeholder="pc_key_..."
+                        value={pineconeApiKey}
+                        onChange={(e) => setPineconeApiKey(e.target.value)}
+                        className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPineconeKey(!showPineconeKey)}
+                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-700 cursor-pointer"
+                      >
+                        {showPineconeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone Index Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. aichat-index"
+                        value={pineconeIndex}
+                        onChange={(e) => setPineconeIndex(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone Namespace (Optional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. custom-space"
+                        value={pineconeNamespace}
+                        onChange={(e) => setPineconeNamespace(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Embedding Provider (RAG Ingestion)</label>
+                    <select
+                      value={embeddingProvider}
+                      onChange={(e) => setEmbeddingProvider(e.target.value as 'openai' | 'gemini')}
+                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
+                    >
+                      <option value="openai">OpenAI Embeddings (text-embedding-3-small)</option>
+                      <option value="gemini">Google Gemini Embeddings (text-embedding-004)</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setAgentStatus('active')}
-                    className={`px-4 py-1.5 rounded-lg font-bold text-xs border transition-all ${
-                      agentStatus === 'active'
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
-                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
-                    }`}
-                  >
-                    Active
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAgentStatus('inactive')}
-                    className={`px-4 py-1.5 rounded-lg font-bold text-xs border transition-all ${
-                      agentStatus === 'inactive'
-                        ? 'bg-zinc-800 border-zinc-850 text-white shadow-sm'
-                        : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
-                    }`}
-                  >
-                    Inactive
-                  </button>
+              )}
+
+              {/* TAB 4: KNOWLEDGE BASE (RAG) FILES UPLOADER */}
+              {modalTab === 'kb' && selectedAgent && (
+                <div className="space-y-5 animate-in fade-in duration-150 flex flex-col h-[50vh]">
+                  
+                  {/* Upload Area */}
+                  <div className="border-2 border-dashed border-zinc-250 rounded-2xl p-5 text-center flex flex-col items-center justify-center bg-zinc-50/50 hover:bg-zinc-50 transition-colors relative shrink-0">
+                    <input 
+                      type="file" 
+                      accept=".pdf,.docx,.md,.txt" 
+                      onChange={handleFileUpload} 
+                      disabled={uploadingFile}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                    />
+                    {uploadingFile ? (
+                      <div className="space-y-2 flex flex-col items-center">
+                        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                        <span className="text-xs font-bold text-zinc-700">Chunking & Uploading vectors to Pinecone...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <UploadCloud className="w-10 h-10 text-zinc-400 mx-auto" />
+                        <div>
+                          <p className="text-xs font-bold text-zinc-800">Drag and drop file here, or click to upload</p>
+                          <p className="text-[10px] text-zinc-450 mt-0.5">Supports PDF, DOCX, Markdown, Text (.txt)</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Documents list */}
+                  <div className="flex-1 overflow-y-auto border border-zinc-200 rounded-2xl bg-white flex flex-col">
+                    <div className="bg-zinc-50 px-4 py-2 border-b border-zinc-150 text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">
+                      Uploaded Documents ({kbFiles.length})
+                    </div>
+                    {loadingFiles ? (
+                      <div className="flex-1 flex items-center justify-center p-8 text-xs text-zinc-450 gap-2">
+                        <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" /> Loading files...
+                      </div>
+                    ) : kbFiles.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400 text-xs">
+                        <FileUp className="w-8 h-8 text-zinc-300 mb-1" />
+                        No files in the knowledge base yet.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-zinc-150 overflow-y-auto">
+                        {kbFiles.map((file) => {
+                          const sizeKB = (file.size_bytes / 1024).toFixed(1);
+                          return (
+                            <div key={file.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-zinc-50/50">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <FileText className="w-5 h-5 text-zinc-450 shrink-0" />
+                                <div className="min-w-0">
+                                  <div className="font-bold text-zinc-900 text-xs truncate max-w-[200px]">{file.file_name}</div>
+                                  <div className="text-[10px] text-zinc-400 mt-0.5 font-semibold">
+                                    {sizeKB} KB · {file.chunk_count} chunks · <span className="uppercase text-[9px]">{file.embedding_provider}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                                  file.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                  file.status === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+                                  'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                                }`}>
+                                  {file.status}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleFileDelete(file.id)}
+                                  className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-4.5 h-4.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* TAB 5: AI TOOLS SELECTOR */}
+              {modalTab === 'tools' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">AI Capabilities & Tools</label>
+                    <p className="text-[10px] text-zinc-400">Toggle which tools the AI agent can execute. Active tools will expand the AI prompt automatically.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Tool Item */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTool('search_knowledge_base')}
+                      className={`w-full flex items-center justify-between p-3.5 border rounded-xl text-left transition-all active:scale-[0.99] cursor-pointer ${
+                        activeTools.includes('search_knowledge_base')
+                          ? 'border-emerald-500 bg-emerald-50/10'
+                          : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-lg border ${
+                          activeTools.includes('search_knowledge_base') ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-zinc-50 border-zinc-100 text-zinc-500'
+                        }`}>
+                          <Database className="w-4 h-4 shrink-0" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-900">Knowledge Base Vector Retrieval</h4>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">Let the AI query Pinecone to answer questions based on your uploaded PDFs and documentation.</p>
+                        </div>
+                      </div>
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                        activeTools.includes('search_knowledge_base') ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-zinc-300 bg-white'
+                      }`}>
+                        {activeTools.includes('search_knowledge_base') && <span className="text-[9px]">✓</span>}
+                      </div>
+                    </button>
+
+                    {/* Tool Item */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTool('book_courier')}
+                      className={`w-full flex items-center justify-between p-3.5 border rounded-xl text-left transition-all active:scale-[0.99] cursor-pointer ${
+                        activeTools.includes('book_courier')
+                          ? 'border-emerald-500 bg-emerald-50/10'
+                          : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-lg border ${
+                          activeTools.includes('book_courier') ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-zinc-50 border-zinc-100 text-zinc-500'
+                        }`}>
+                          <Globe className="w-4 h-4 shrink-0" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-900">Automated Courier Booking</h4>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">Allows the agent to call Steadfast/Pathao courier APIs to book orders for customers.</p>
+                        </div>
+                      </div>
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                        activeTools.includes('book_courier') ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-zinc-300 bg-white'
+                      }`}>
+                        {activeTools.includes('book_courier') && <span className="text-[9px]">✓</span>}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
 
             </div>
 
-            {/* Footer */}
+            {/* Modal Footer */}
             <div className="p-5 border-t border-zinc-150 shrink-0 flex gap-3 bg-zinc-50/50">
               <button 
                 type="button" 
                 onClick={() => setModalOpen(false)}
-                className="flex-1 py-2 px-4 border border-zinc-300 text-xs font-bold text-zinc-700 rounded-lg hover:bg-zinc-50 bg-white transition-colors"
+                className="flex-1 py-2 px-4 border border-zinc-300 text-xs font-bold text-zinc-700 rounded-lg hover:bg-zinc-50 bg-white transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button 
                 type="submit" 
                 disabled={saving}
-                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md hover:shadow-emerald-600/10"
+                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md hover:shadow-emerald-600/10 cursor-pointer"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {saving ? 'Saving...' : selectedAgent ? 'Save Changes' : 'Create Agent'}
+                {saving ? 'Saving...' : selectedAgent ? 'Save Configuration' : 'Create Agent'}
               </button>
             </div>
           </form>
@@ -636,7 +1192,7 @@ export default function AIAgentsPage() {
         }`}
       >
         <div className={`flex items-start gap-3 px-5 py-4 rounded-2xl border shadow-2xl backdrop-blur-md ${
-          toast.type === 'success' ? 'bg-emerald-950/90 border-emerald-700/50 text-emerald-50' :
+          toast.type === 'success' ? 'bg-zinc-950/90 border-emerald-700/50 text-emerald-50' :
           toast.type === 'error' ? 'bg-red-950/90 border-red-700/50 text-red-50' :
           'bg-zinc-900/90 border-zinc-700/50 text-zinc-50'
         }`}>
@@ -648,7 +1204,7 @@ export default function AIAgentsPage() {
           </div>
           <button 
             onClick={() => setToast(prev => ({ ...prev, visible: false }))}
-            className="shrink-0 p-0.5 rounded-md hover:bg-white/10 transition-colors"
+            className="shrink-0 p-0.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4 opacity-60" />
           </button>
