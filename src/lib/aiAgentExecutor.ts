@@ -141,7 +141,7 @@ export async function triggerAiReplyIfNeeded(
               }
             }
           } else if (embeddingProvider === 'gemini') {
-            const geminiKey = credentials.gemini_key || globalSettings.global_openai_key;
+            const geminiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key;
             if (geminiKey) {
               const genAI = new GoogleGenerativeAI(geminiKey);
               const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
@@ -188,6 +188,9 @@ System instructions:
 ${systemPrompt}`;
     }
 
+    // Enforce strict prompt adherence
+    systemPrompt += '\n\nIMPORTANT: You must strictly follow the system instructions, rules, and guidelines provided above. Do not deviate from these instructions under any circumstances. Stay on topic and follow all rules precisely.';
+
     // 5. Query LLM and calculate token/performance telemetry
     let aiReplyText = '';
     let modelUsed = '';
@@ -221,7 +224,7 @@ ${systemPrompt}`;
         body: JSON.stringify({
           model: modelUsed,
           messages: openAiMessages,
-          temperature: 0.7
+          temperature: 0.2
         })
       });
 
@@ -247,7 +250,7 @@ ${systemPrompt}`;
       });
 
     } else if (llmProvider === 'gemini') {
-      const apiKey = credentials.gemini_key || globalSettings.global_openai_key; // fallback
+      const apiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key; // fallback
       if (!apiKey) {
         console.error(`AI Agent '${agentName}' configuration error: Missing Gemini API Key.`);
         return;
@@ -272,7 +275,7 @@ ${systemPrompt}`;
 
       const result = await model.generateContent({
         contents,
-        generationConfig: { temperature: 0.7 }
+        generationConfig: { temperature: 0.2 }
       });
 
       const executionTime = Date.now() - runStartTime;

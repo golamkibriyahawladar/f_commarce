@@ -268,7 +268,7 @@ export async function POST(req: Request) {
         });
       }
     } else if (embeddingProvider === 'gemini') {
-      const geminiKey = credentials.gemini_key || globalSettings.global_openai_key; // using global key or fallback
+      const geminiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key; // using global key or fallback
       if (!geminiKey) {
         throw new Error('Gemini API key missing. Please configure a custom key or set a global fallback key.');
       }

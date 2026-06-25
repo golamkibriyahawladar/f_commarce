@@ -75,7 +75,7 @@ export default function AIAgentsPage() {
   // Form State
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Integration | null>(null);
-  const [modalTab, setModalTab] = useState<'core' | 'model' | 'pinecone' | 'kb' | 'tools'>('core');
+  const [modalTab, setModalTab] = useState<'core' | 'model' | 'kb' | 'tools'>('core');
   
   // 1. Core Tab
   const [agentName, setAgentName] = useState('');
@@ -110,6 +110,15 @@ export default function AIAgentsPage() {
   const [showKey, setShowKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showPineconeKey, setShowPineconeKey] = useState(false);
+
+  // Pinecone KB States
+  const [pineconeIndexes, setPineconeIndexes] = useState<string[]>([]);
+  const [loadingPineconeIndexes, setLoadingPineconeIndexes] = useState(false);
+  const [pineconeConnectionStatus, setPineconeConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'disconnected'>('idle');
+  const [ingestMode, setIngestMode] = useState<'file' | 'text'>('file');
+  const [rawTextTitle, setRawTextTitle] = useState('');
+  const [rawTextContent, setRawTextContent] = useState('');
+  const [clearingNamespace, setClearingNamespace] = useState(false);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning'; visible: boolean }>({ message: '', type: 'success', visible: false });
@@ -226,6 +235,112 @@ export default function AIAgentsPage() {
     }
   };
 
+  // Fetch Pinecone indexes dynamically
+  const syncPineconeIndexes = async (apiKeyVal?: string, agentIdOverride?: string) => {
+    if (!profile?.company_id) return;
+    setPineconeConnectionStatus('checking');
+    setLoadingPineconeIndexes(true);
+    try {
+      const res = await fetch('/api/pinecone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'listIndexes',
+          apiKey: apiKeyVal !== undefined ? apiKeyVal : pineconeApiKey,
+          companyId: profile.company_id,
+          agentId: agentIdOverride || selectedAgent?.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to connect');
+      setPineconeIndexes(data.indexes || []);
+      if (data.indexes?.length > 0 && !data.indexes.includes(pineconeIndex)) {
+        setPineconeIndex(data.indexes[0]);
+      }
+      setPineconeConnectionStatus('connected');
+    } catch (err: any) {
+      console.error('Pinecone connect error:', err);
+      setPineconeIndexes([]);
+      setPineconeConnectionStatus('disconnected');
+      showToast(err.message || 'Failed to connect to Pinecone', 'error');
+    } finally {
+      setLoadingPineconeIndexes(false);
+    }
+  };
+
+  // Clear all vectors in a Pinecone namespace
+  const handleClearNamespace = async () => {
+    if (!pineconeIndex || !pineconeNamespace) {
+      showToast('Please select an index and enter a namespace first.', 'warning');
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete ALL vectors in namespace "${pineconeNamespace}"? This cannot be undone.`)) return;
+    setClearingNamespace(true);
+    try {
+      const res = await fetch('/api/pinecone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'clearNamespace',
+          apiKey: pineconeApiKey,
+          companyId: profile?.company_id,
+          agentId: selectedAgent?.id,
+          indexName: pineconeIndex,
+          namespace: pineconeNamespace
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast(data.message || 'Namespace cleared successfully!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to clear namespace', 'error');
+    } finally {
+      setClearingNamespace(false);
+    }
+  };
+
+  // Ingest raw text as a virtual file
+  const handleIngestRawText = async () => {
+    if (!rawTextContent.trim()) {
+      showToast('Please enter some text content to ingest.', 'warning');
+      return;
+    }
+    if (!selectedAgent || !profile?.company_id) {
+      showToast('Please save the agent first before ingesting content.', 'warning');
+      return;
+    }
+    const title = rawTextTitle.trim() || `pasted-text-${Date.now()}`;
+    const fileName = title.endsWith('.txt') ? title : `${title}.txt`;
+    setUploadingFile(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const blob = new Blob([rawTextContent], { type: 'text/plain' });
+      const file = new File([blob], fileName, { type: 'text/plain' });
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('companyId', profile.company_id);
+      formData.append('agentId', selectedAgent.id);
+      const res = await fetch('/api/knowledge-base', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to ingest text.');
+      }
+      showToast(`Text "${fileName}" parsed and ingested successfully.`, 'success');
+      setRawTextContent('');
+      setRawTextTitle('');
+      await fetchKbFiles(selectedAgent.id);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setSelectedAgent(null);
     setModalTab('core');
@@ -249,6 +364,15 @@ export default function AIAgentsPage() {
     setPineconeNamespace('');
     setEmbeddingProvider('openai');
     
+    // KB states
+    setPineconeIndexes([]);
+    setPineconeConnectionStatus('idle');
+    setLoadingPineconeIndexes(false);
+    setIngestMode('file');
+    setRawTextTitle('');
+    setRawTextContent('');
+    setClearingNamespace(false);
+
     // Files and tools
     setKbFiles([]);
     setActiveTools([]);
@@ -282,6 +406,15 @@ export default function AIAgentsPage() {
     setPineconeNamespace(creds.pinecone_namespace || '');
     setEmbeddingProvider(creds.embedding_provider || 'openai');
     
+    // KB states
+    setPineconeIndexes(creds.pinecone_index ? [creds.pinecone_index] : []);
+    setPineconeConnectionStatus(creds.pinecone_api_key ? 'connected' : 'idle');
+    setLoadingPineconeIndexes(false);
+    setIngestMode('file');
+    setRawTextTitle('');
+    setRawTextContent('');
+    setClearingNamespace(false);
+
     // Tools
     setActiveTools(creds.active_tools || []);
     
@@ -289,8 +422,11 @@ export default function AIAgentsPage() {
     setShowGeminiKey(false);
     setShowPineconeKey(false);
     
-    // Fetch files in background
+    // Fetch files and Pinecone indexes in background
     fetchKbFiles(agent.id);
+    if (creds.pinecone_api_key) {
+      syncPineconeIndexes('••••••••', agent.id);
+    }
     
     const activeProvider = creds.llm_provider || 'openai';
     const activeKey = activeProvider === 'openai' ? (creds.openai_key ? '••••••••' : '') : (creds.gemini_key ? '••••••••' : '');
@@ -787,24 +923,13 @@ export default function AIAgentsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setModalTab('pinecone')}
+                onClick={() => setModalTab('kb')}
                 className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
-                  modalTab === 'pinecone' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  modalTab === 'kb' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                Vector Database
+                Knowledge Base
               </button>
-              {selectedAgent && (
-                <button
-                  type="button"
-                  onClick={() => setModalTab('kb')}
-                  className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer ${
-                    modalTab === 'kb' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-500 hover:text-zinc-900'
-                  }`}
-                >
-                  Knowledge Base (RAG)
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => setModalTab('tools')}
@@ -1111,19 +1236,41 @@ export default function AIAgentsPage() {
                 </div>
               )}
 
-              {/* TAB 3: PINECONE VECTOR DATABASE */}
-              {modalTab === 'pinecone' && (
-                <div className="space-y-4 animate-in fade-in duration-150">
+              {/* TAB 3: KNOWLEDGE BASE (Combined) */}
+              {modalTab === 'kb' && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  
+                  {/* Info Banner */}
                   <div className="bg-zinc-50 border border-zinc-200/80 rounded-xl p-4 flex items-start gap-2.5">
                     <Database className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                     <div className="text-xs leading-relaxed text-zinc-650">
-                      <p className="font-bold text-zinc-800 mb-0.5">Custom Vector Database Settings</p>
-                      Enter your Pinecone credentials to enable vector document similarity lookup. Standard namespaces will separate files across agents automatically.
+                      <p className="font-bold text-zinc-800 mb-0.5">Knowledge Base & Vector Database</p>
+                      Connect your Pinecone vector database, upload documents or paste raw text to build an AI knowledge base. The agent will use this data to answer questions using RAG (Retrieval-Augmented Generation).
                     </div>
                   </div>
 
+                  {/* Pinecone API Key */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone API Key</label>
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone API Key</label>
+                      {pineconeConnectionStatus === 'connected' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
+                          Connected
+                        </span>
+                      )}
+                      {pineconeConnectionStatus === 'disconnected' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                          Not Connected
+                        </span>
+                      )}
+                      {pineconeConnectionStatus === 'checking' && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-650 border border-zinc-200">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-zinc-500" />
+                          Connecting...
+                        </span>
+                      )}
+                    </div>
                     <div className="relative">
                       <input 
                         type={showPineconeKey ? 'text' : 'password'} 
@@ -1140,42 +1287,89 @@ export default function AIAgentsPage() {
                         {showPineconeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    <div className="flex justify-end mt-1">
+                      <button
+                        type="button"
+                        onClick={() => syncPineconeIndexes(pineconeApiKey)}
+                        disabled={loadingPineconeIndexes || !pineconeApiKey}
+                        className="flex items-center gap-1 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {loadingPineconeIndexes ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Connecting...</span>
+                          </>
+                        ) : (
+                          <span>Connect Pinecone</span>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Index + Namespace */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone Index Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. aichat-index"
-                        value={pineconeIndex}
-                        onChange={(e) => setPineconeIndex(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
-                      />
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Index Name</label>
+                      {pineconeIndexes.length > 0 ? (
+                        <select
+                          value={pineconeIndex}
+                          onChange={(e) => setPineconeIndex(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
+                        >
+                          <option value="">— Select Index —</option>
+                          {pineconeIndexes.map(idx => (
+                            <option key={idx} value={idx}>{idx}</option>
+                          ))}
+                          {pineconeIndex && !pineconeIndexes.includes(pineconeIndex) && (
+                            <option value={pineconeIndex}>{pineconeIndex} (Current)</option>
+                          )}
+                        </select>
+                      ) : (
+                        <input 
+                          type="text" 
+                          placeholder="e.g. aichat-index"
+                          value={pineconeIndex}
+                          onChange={(e) => setPineconeIndex(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                        />
+                      )}
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone Namespace (Optional)</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. custom-space"
-                        value={pineconeNamespace}
-                        onChange={(e) => setPineconeNamespace(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
-                      />
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Namespace</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="e.g. custom-space"
+                          value={pineconeNamespace}
+                          onChange={(e) => setPineconeNamespace(e.target.value)}
+                          className="flex-1 px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleClearNamespace}
+                          disabled={clearingNamespace || !pineconeIndex || !pineconeNamespace}
+                          title="Clear all vectors in this namespace"
+                          className="px-3 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1 shrink-0"
+                        >
+                          {clearingNamespace ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          <span className="hidden sm:inline">Clear</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Embedding Provider */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Embedding Provider (RAG Ingestion)</label>
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Embedding Provider</label>
                       {isEmbeddingConnected ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 animate-in fade-in duration-200">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
                           Connected
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-in fade-in duration-200">
-                          Not Connected (Set key in LLM tab)
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Set LLM API key first
                         </span>
                       )}
                     </div>
@@ -1188,89 +1382,157 @@ export default function AIAgentsPage() {
                       <option value="gemini">Google Gemini Embeddings (text-embedding-004)</option>
                     </select>
                   </div>
-                </div>
-              )}
 
-              {/* TAB 4: KNOWLEDGE BASE (RAG) FILES UPLOADER */}
-              {modalTab === 'kb' && selectedAgent && (
-                <div className="space-y-5 animate-in fade-in duration-150 flex flex-col h-[50vh]">
-                  
-                  {/* Upload Area */}
-                  <div className="border-2 border-dashed border-zinc-250 rounded-2xl p-5 text-center flex flex-col items-center justify-center bg-zinc-50/50 hover:bg-zinc-50 transition-colors relative shrink-0">
-                    <input 
-                      type="file" 
-                      accept=".pdf,.docx,.md,.txt" 
-                      onChange={handleFileUpload} 
-                      disabled={uploadingFile}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                    />
-                    {uploadingFile ? (
-                      <div className="space-y-2 flex flex-col items-center">
-                        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-                        <span className="text-xs font-bold text-zinc-700">Chunking & Uploading vectors to Pinecone...</span>
+                  {/* Ingest Content Section */}
+                  <div className="border-t border-zinc-200 pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">Ingest Content</label>
+                      <div className="flex bg-zinc-100 rounded-lg p-0.5 border border-zinc-200">
+                        <button
+                          type="button"
+                          onClick={() => setIngestMode('file')}
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                            ingestMode === 'file' ? 'bg-white text-zinc-900 shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-700 border border-transparent'
+                          }`}
+                        >
+                          📄 Upload File
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIngestMode('text')}
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                            ingestMode === 'text' ? 'bg-white text-zinc-900 shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-700 border border-transparent'
+                          }`}
+                        >
+                          ✏️ Paste Text
+                        </button>
+                      </div>
+                    </div>
+
+                    {!selectedAgent ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                        <AlertCircle className="w-5 h-5 text-amber-500 mx-auto mb-1" />
+                        <p className="text-xs font-bold text-amber-800">Save the agent first</p>
+                        <p className="text-[10px] text-amber-600 mt-0.5">Create and save this AI Agent before uploading documents or pasting text.</p>
+                      </div>
+                    ) : ingestMode === 'file' ? (
+                      <div className="border-2 border-dashed border-zinc-250 rounded-2xl p-5 text-center flex flex-col items-center justify-center bg-zinc-50/50 hover:bg-zinc-50 transition-colors relative">
+                        <input 
+                          type="file" 
+                          accept=".pdf,.docx,.md,.txt" 
+                          onChange={handleFileUpload} 
+                          disabled={uploadingFile}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                        />
+                        {uploadingFile ? (
+                          <div className="space-y-2 flex flex-col items-center">
+                            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                            <span className="text-xs font-bold text-zinc-700">Chunking & Uploading vectors...</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <UploadCloud className="w-10 h-10 text-zinc-400 mx-auto" />
+                            <div>
+                              <p className="text-xs font-bold text-zinc-800">Drag and drop file here, or click to upload</p>
+                              <p className="text-[10px] text-zinc-450 mt-0.5">Supports PDF, DOCX, Markdown, Text (.txt)</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <UploadCloud className="w-10 h-10 text-zinc-400 mx-auto" />
-                        <div>
-                          <p className="text-xs font-bold text-zinc-800">Drag and drop file here, or click to upload</p>
-                          <p className="text-[10px] text-zinc-450 mt-0.5">Supports PDF, DOCX, Markdown, Text (.txt)</p>
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          placeholder="Document title (e.g. Product FAQ)"
+                          value={rawTextTitle}
+                          onChange={(e) => setRawTextTitle(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                        />
+                        <textarea
+                          rows={6}
+                          placeholder="Paste your raw text content here... (e.g. product descriptions, FAQ answers, policy documents)"
+                          value={rawTextContent}
+                          onChange={(e) => setRawTextContent(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono transition-colors resize-none"
+                        />
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-zinc-400 font-semibold">{rawTextContent.length} characters</span>
+                          <button
+                            type="button"
+                            onClick={handleIngestRawText}
+                            disabled={uploadingFile || !rawTextContent.trim()}
+                            className="flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                          >
+                            {uploadingFile ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Ingesting...</span>
+                              </>
+                            ) : (
+                              <>
+                                <UploadCloud className="w-3.5 h-3.5" />
+                                <span>Ingest Text</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Documents list */}
-                  <div className="flex-1 overflow-y-auto border border-zinc-200 rounded-2xl bg-white flex flex-col">
-                    <div className="bg-zinc-50 px-4 py-2 border-b border-zinc-150 text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">
-                      Uploaded Documents ({kbFiles.length})
-                    </div>
-                    {loadingFiles ? (
-                      <div className="flex-1 flex items-center justify-center p-8 text-xs text-zinc-450 gap-2">
-                        <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" /> Loading files...
+                  {/* Documents List */}
+                  {selectedAgent && (
+                    <div className="border border-zinc-200 rounded-2xl bg-white flex flex-col max-h-[30vh]">
+                      <div className="bg-zinc-50 px-4 py-2 border-b border-zinc-150 text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">
+                        Uploaded Documents ({kbFiles.length})
                       </div>
-                    ) : kbFiles.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400 text-xs">
-                        <FileUp className="w-8 h-8 text-zinc-300 mb-1" />
-                        No files in the knowledge base yet.
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-zinc-150 overflow-y-auto">
-                        {kbFiles.map((file) => {
-                          const sizeKB = (file.size_bytes / 1024).toFixed(1);
-                          return (
-                            <div key={file.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-zinc-50/50">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <FileText className="w-5 h-5 text-zinc-450 shrink-0" />
-                                <div className="min-w-0">
-                                  <div className="font-bold text-zinc-900 text-xs truncate max-w-[200px]">{file.file_name}</div>
-                                  <div className="text-[10px] text-zinc-400 mt-0.5 font-semibold">
-                                    {sizeKB} KB · {file.chunk_count} chunks · <span className="uppercase text-[9px]">{file.embedding_provider}</span>
+                      {loadingFiles ? (
+                        <div className="flex items-center justify-center p-8 text-xs text-zinc-450 gap-2">
+                          <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" /> Loading files...
+                        </div>
+                      ) : kbFiles.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center p-8 text-center text-zinc-400 text-xs">
+                          <FileUp className="w-8 h-8 text-zinc-300 mb-1" />
+                          No files in the knowledge base yet.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-zinc-150 overflow-y-auto">
+                          {kbFiles.map((file) => {
+                            const sizeKB = (file.size_bytes / 1024).toFixed(1);
+                            return (
+                              <div key={file.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-zinc-50/50">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <FileText className="w-5 h-5 text-zinc-450 shrink-0" />
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-zinc-900 text-xs truncate max-w-[200px]">{file.file_name}</div>
+                                    <div className="text-[10px] text-zinc-400 mt-0.5 font-semibold">
+                                      {sizeKB} KB · {file.chunk_count} chunks · <span className="uppercase text-[9px]">{file.embedding_provider}</span>
+                                    </div>
                                   </div>
                                 </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                                    file.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    file.status === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+                                    'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                                  }`}>
+                                    {file.status}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFileDelete(file.id)}
+                                    className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-4.5 h-4.5" />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3 shrink-0">
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
-                                  file.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                  file.status === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
-                                  'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
-                                }`}>
-                                  {file.status}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleFileDelete(file.id)}
-                                  className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors cursor-pointer"
-                                >
-                                  <Trash2 className="w-4.5 h-4.5" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
