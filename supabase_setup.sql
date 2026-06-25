@@ -133,50 +133,60 @@ ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
 -- 1. Companies policies
+DROP POLICY IF EXISTS "Users can view their own company" ON companies;
 CREATE POLICY "Users can view their own company" ON companies
   FOR SELECT USING (
     id = (SELECT company_id FROM profiles WHERE profiles.id = auth.uid())
   );
 
 -- 2. Profiles policies
+DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
 CREATE POLICY "Users can view own profile" ON profiles
   FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
 
 -- 3. Tenant isolation helper policies (conversations, messages, integrations, leads, orders, customers)
+DROP POLICY IF EXISTS "Tenant isolation - integrations" ON integrations;
 CREATE POLICY "Tenant isolation - integrations" ON integrations
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Tenant isolation - customers" ON customers;
 CREATE POLICY "Tenant isolation - customers" ON customers
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Tenant isolation - profile_assignments" ON profile_assignments;
 CREATE POLICY "Tenant isolation - profile_assignments" ON profile_assignments
   FOR ALL USING (
     profile_id = auth.uid() OR
     integration_id IN (SELECT id FROM integrations WHERE company_id = (SELECT company_id FROM profiles WHERE id = auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Tenant isolation - conversations" ON conversations;
 CREATE POLICY "Tenant isolation - conversations" ON conversations
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Tenant isolation - messages" ON messages;
 CREATE POLICY "Tenant isolation - messages" ON messages
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Tenant isolation - leads" ON leads;
 CREATE POLICY "Tenant isolation - leads" ON leads
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "Tenant isolation - orders" ON orders;
 CREATE POLICY "Tenant isolation - orders" ON orders
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
@@ -229,7 +239,8 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Trigger to run on Auth user creation
-CREATE OR REPLACE TRIGGER on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
@@ -250,6 +261,7 @@ CREATE TABLE IF NOT EXISTS knowledge_base_files (
 ALTER TABLE knowledge_base_files ENABLE ROW LEVEL SECURITY;
 
 -- Add RLS policy for tenant isolation
+DROP POLICY IF EXISTS "Tenant isolation - knowledge_base_files" ON knowledge_base_files;
 CREATE POLICY "Tenant isolation - knowledge_base_files" ON knowledge_base_files
   FOR ALL USING (
     company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
