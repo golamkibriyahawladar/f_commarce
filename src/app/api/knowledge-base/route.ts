@@ -169,6 +169,27 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
+    // Clear previous namespace data if overwrite is requested
+    const clearNamespace = formData.get('clearNamespace') === 'true';
+    if (clearNamespace) {
+      try {
+        console.log(`Clearing namespace "${pineconeNamespace}" as requested by overwrite option...`);
+        const pc = new Pinecone({ apiKey: pineconeApiKey });
+        const index = pc.Index(pineconeIndex);
+        await index.namespace(pineconeNamespace).deleteAll();
+
+        // Wipe local DB file records as well
+        await supabaseService
+          .from('knowledge_base_files')
+          .delete()
+          .eq('integration_id', agentId)
+          .eq('company_id', companyId);
+      } catch (pcErr: any) {
+        console.error('Pinecone/DB purge exception during overwrite:', pcErr);
+        // Continue anyway to avoid blocking upload if Pinecone is empty
+      }
+    }
+
     // Read file buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);

@@ -118,7 +118,7 @@ export default function AIAgentsPage() {
   const [ingestMode, setIngestMode] = useState<'file' | 'text'>('file');
   const [rawTextTitle, setRawTextTitle] = useState('');
   const [rawTextContent, setRawTextContent] = useState('');
-  const [clearingNamespace, setClearingNamespace] = useState(false);
+  const [clearBeforeIngest, setClearBeforeIngest] = useState(false);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning'; visible: boolean }>({ message: '', type: 'success', visible: false });
@@ -268,36 +268,7 @@ export default function AIAgentsPage() {
     }
   };
 
-  // Clear all vectors in a Pinecone namespace
-  const handleClearNamespace = async () => {
-    if (!pineconeIndex || !pineconeNamespace) {
-      showToast('Please select an index and enter a namespace first.', 'warning');
-      return;
-    }
-    if (!confirm(`Are you sure you want to delete ALL vectors in namespace "${pineconeNamespace}"? This cannot be undone.`)) return;
-    setClearingNamespace(true);
-    try {
-      const res = await fetch('/api/pinecone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'clearNamespace',
-          apiKey: pineconeApiKey,
-          companyId: profile?.company_id,
-          agentId: selectedAgent?.id,
-          indexName: pineconeIndex,
-          namespace: pineconeNamespace
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      showToast(data.message || 'Namespace cleared successfully!', 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to clear namespace', 'error');
-    } finally {
-      setClearingNamespace(false);
-    }
-  };
+
 
   // Ingest raw text as a virtual file
   const handleIngestRawText = async () => {
@@ -321,6 +292,7 @@ export default function AIAgentsPage() {
       formData.append('file', file);
       formData.append('companyId', profile.company_id);
       formData.append('agentId', selectedAgent.id);
+      formData.append('clearNamespace', clearBeforeIngest ? 'true' : 'false');
       const res = await fetch('/api/knowledge-base', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -371,7 +343,7 @@ export default function AIAgentsPage() {
     setIngestMode('file');
     setRawTextTitle('');
     setRawTextContent('');
-    setClearingNamespace(false);
+    setClearBeforeIngest(false);
 
     // Files and tools
     setKbFiles([]);
@@ -413,7 +385,7 @@ export default function AIAgentsPage() {
     setIngestMode('file');
     setRawTextTitle('');
     setRawTextContent('');
-    setClearingNamespace(false);
+    setClearBeforeIngest(false);
 
     // Tools
     setActiveTools(creds.active_tools || []);
@@ -473,6 +445,7 @@ export default function AIAgentsPage() {
       formData.append('file', file);
       formData.append('companyId', profile.company_id);
       formData.append('agentId', selectedAgent.id);
+      formData.append('clearNamespace', clearBeforeIngest ? 'true' : 'false');
 
       const res = await fetch('/api/knowledge-base', {
         method: 'POST',
@@ -1336,24 +1309,24 @@ export default function AIAgentsPage() {
                     </div>
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Namespace</label>
-                      <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="e.g. custom-space"
+                        value={pineconeNamespace}
+                        onChange={(e) => setPineconeNamespace(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                      />
+                      <div className="flex items-center gap-2 mt-1.5">
                         <input 
-                          type="text" 
-                          placeholder="e.g. custom-space"
-                          value={pineconeNamespace}
-                          onChange={(e) => setPineconeNamespace(e.target.value)}
-                          className="flex-1 px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
+                          type="checkbox"
+                          id="clearBeforeIngest"
+                          checked={clearBeforeIngest}
+                          onChange={(e) => setClearBeforeIngest(e.target.checked)}
+                          className="w-3.5 h-3.5 text-emerald-600 border-zinc-300 rounded focus:ring-emerald-500 cursor-pointer"
                         />
-                        <button
-                          type="button"
-                          onClick={handleClearNamespace}
-                          disabled={clearingNamespace || !pineconeIndex || !pineconeNamespace}
-                          title="Clear all vectors in this namespace"
-                          className="px-3 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1 shrink-0"
-                        >
-                          {clearingNamespace ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                          <span className="hidden sm:inline">Clear</span>
-                        </button>
+                        <label htmlFor="clearBeforeIngest" className="text-[10px] font-bold text-zinc-550 cursor-pointer select-none">
+                          Clear namespace before upload / ingest (overwrite)
+                        </label>
                       </div>
                     </div>
                   </div>
