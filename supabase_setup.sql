@@ -232,3 +232,26 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ── 10. KNOWLEDGE BASE RAG FILES ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS knowledge_base_files (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+  integration_id UUID REFERENCES integrations(id) ON DELETE CASCADE NOT NULL,
+  file_name TEXT NOT NULL,
+  size_bytes INT NOT NULL,
+  chunk_count INT DEFAULT 0,
+  embedding_provider TEXT NOT NULL DEFAULT 'openai' CHECK (embedding_provider IN ('openai', 'gemini')),
+  status TEXT DEFAULT 'processing' CHECK (status IN ('processing', 'completed', 'error')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE knowledge_base_files ENABLE ROW LEVEL SECURITY;
+
+-- Add RLS policy for tenant isolation
+CREATE POLICY "Tenant isolation - knowledge_base_files" ON knowledge_base_files
+  FOR ALL USING (
+    company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
+  );
+

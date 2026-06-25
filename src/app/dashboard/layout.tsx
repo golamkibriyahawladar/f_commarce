@@ -84,6 +84,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
+  const SUPER_ADMIN_EMAILS = [
+    'dev@autozy.app',
+    'golamkibriya1200@gmail.com',
+    'golamkibriyahawladar@gmail.com',
+    'admin@aichat.com'
+  ];
+
   const menuItems = [
     { href: '/dashboard', icon: <TrendingUp className="w-5 h-5" />, label: 'Overview' },
     { href: '/dashboard/inbox', icon: <MessageSquare className="w-5 h-5" />, label: 'Omnichannel Inbox' },
@@ -91,6 +98,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: '/dashboard/crm', icon: <Users className="w-5 h-5" />, label: 'CRM & Delivery' },
     { href: '/dashboard/integrations', icon: <Plug className="w-5 h-5" />, label: 'Integrations' },
     { href: '/dashboard/agents', icon: <UserCheck className="w-5 h-5" />, label: 'Agents' },
+    ...(SUPER_ADMIN_EMAILS.includes(profile?.email || '') 
+      ? [{ href: '/dashboard/super-admin', icon: <ShieldAlert className="w-5 h-5 text-red-500" />, label: 'Super Admin Hub' }] 
+      : []
+    ),
     { href: '/docs', icon: <BookOpen className="w-5 h-5" />, label: 'Documentation' },
     { href: '/dashboard/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' }
   ];
