@@ -528,6 +528,16 @@ export default function AIAgentsPage() {
     return { title, icon };
   };
 
+  const isEmbeddingConnected = 
+    (embeddingProvider === 'openai' && (
+      (llmProvider === 'openai' && apiConnectionStatus === 'connected') || 
+      (openaiKey && openaiKey !== '')
+    )) ||
+    (embeddingProvider === 'gemini' && (
+      (llmProvider === 'gemini' && apiConnectionStatus === 'connected') || 
+      (geminiKey && geminiKey !== '')
+    ));
+
   const isAdmin = profile?.role === 'owner' || profile?.role === 'manager';
 
   return (
@@ -1156,7 +1166,19 @@ export default function AIAgentsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Embedding Provider (RAG Ingestion)</label>
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Embedding Provider (RAG Ingestion)</label>
+                      {isEmbeddingConnected ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 animate-in fade-in duration-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
+                          Connected
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-in fade-in duration-200">
+                          Not Connected (Set key in LLM tab)
+                        </span>
+                      )}
+                    </div>
                     <select
                       value={embeddingProvider}
                       onChange={(e) => setEmbeddingProvider(e.target.value as 'openai' | 'gemini')}
