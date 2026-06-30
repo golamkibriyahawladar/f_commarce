@@ -390,13 +390,13 @@ export default function DeveloperPage() {
             <div className="p-5 space-y-4">
 
               {/* Generate Token Form */}
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={newTokenName}
                   onChange={(e) => setNewTokenName(e.target.value)}
                   placeholder="Token name (e.g. Production)"
-                  className="flex-1 px-3 py-2 border border-zinc-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white text-zinc-800"
+                  className="flex-1 min-w-0 px-3 py-2 border border-zinc-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white text-zinc-800"
                   onKeyDown={(e) => e.key === 'Enter' && handleGenerateToken()}
                 />
                 <button
