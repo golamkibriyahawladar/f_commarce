@@ -49,8 +49,23 @@ export async function POST(req: Request) {
             : agent.credentials.gemini_key;
         }
       }
+      
+      // 2. If no agent custom key, check user's company settings key
+      if (!resolvedKey && companyId) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('settings')
+          .eq('id', companyId)
+          .maybeSingle();
+        
+        if (company?.settings) {
+          resolvedKey = provider === 'openai'
+            ? (company.settings.openai_key || company.settings.openaiKey)
+            : (company.settings.gemini_key || company.settings.geminiKey);
+        }
+      }
 
-      // 2. Fall back to system admin settings key
+      // 3. Fall back to system admin settings key
       if (!resolvedKey) {
         const globalSettings = await getGlobalSettings(supabase);
         resolvedKey = provider === 'openai'

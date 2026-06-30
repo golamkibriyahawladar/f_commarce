@@ -82,6 +82,14 @@ export async function triggerAiReplyIfNeeded(
     let systemPrompt = credentials.system_prompt || 'You are a helpful customer support assistant.';
     const llmProvider = credentials.llm_provider || 'openai';
     
+    // Fetch company settings
+    const { data: userCompany } = await supabase
+      .from('companies')
+      .select('settings')
+      .eq('id', companyId)
+      .maybeSingle();
+    const companySettings = userCompany?.settings || {};
+
     // Fetch global fallbacks
     const { data: systemCompany } = await supabase
       .from('companies')
@@ -120,7 +128,7 @@ export async function triggerAiReplyIfNeeded(
 
           // Generate embedding for query
           if (embeddingProvider === 'openai') {
-            const openaiKey = credentials.openai_key || globalSettings.global_openai_key;
+            const openaiKey = credentials.openai_key || companySettings.openai_key || companySettings.openaiKey || globalSettings.global_openai_key;
             if (openaiKey) {
               const embRes = await fetch('https://api.openai.com/v1/embeddings', {
                 method: 'POST',
@@ -141,7 +149,7 @@ export async function triggerAiReplyIfNeeded(
               }
             }
           } else if (embeddingProvider === 'gemini') {
-            const geminiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key;
+            const geminiKey = credentials.gemini_key || companySettings.gemini_key || companySettings.geminiKey || globalSettings.global_gemini_key || globalSettings.global_openai_key;
             if (geminiKey) {
               const genAI = new GoogleGenerativeAI(geminiKey);
               const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
@@ -201,7 +209,7 @@ ${systemPrompt}`;
     let modelUsed = '';
 
     if (llmProvider === 'openai') {
-      const apiKey = credentials.openai_key || globalSettings.global_openai_key;
+      const apiKey = credentials.openai_key || companySettings.openai_key || companySettings.openaiKey || globalSettings.global_openai_key;
       if (!apiKey) {
         console.error(`AI Agent '${agentName}' configuration error: Missing OpenAI API Key.`);
         return;
@@ -255,7 +263,7 @@ ${systemPrompt}`;
       });
 
     } else if (llmProvider === 'gemini') {
-      const apiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key; // fallback
+      const apiKey = credentials.gemini_key || companySettings.gemini_key || companySettings.geminiKey || globalSettings.global_gemini_key || globalSettings.global_openai_key; // fallback
       if (!apiKey) {
         console.error(`AI Agent '${agentName}' configuration error: Missing Gemini API Key.`);
         return;

@@ -1133,7 +1133,9 @@ export default function AIAgentsPage() {
                       <div className="flex justify-between items-center">
                         <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom OpenAI Key (Optional)</label>
                         {apiConnectionStatus === 'connected' ? (
-                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">✓ Connected</span>
+                          <span className="text-[10px] text-emerald-605 font-bold flex items-center gap-0.5">
+                            {openaiKey ? '✓ Connected' : '✓ Connected (Workspace)'}
+                          </span>
                         ) : apiConnectionStatus === 'checking' ? (
                           <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
                             <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-500" />
@@ -1142,7 +1144,7 @@ export default function AIAgentsPage() {
                         ) : openaiKey ? (
                           <span className="text-[10px] text-emerald-650 font-bold flex items-center gap-0.5">✓ Key Saved</span>
                         ) : (
-                          <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                          <span className="text-[10px] text-zinc-400">Falls back to workspace key if empty</span>
                         )}
                       </div>
                       <div className="relative">
@@ -1187,7 +1189,9 @@ export default function AIAgentsPage() {
                       <div className="flex justify-between items-center">
                         <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom Gemini API Key (Optional)</label>
                         {apiConnectionStatus === 'connected' ? (
-                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">✓ Connected</span>
+                          <span className="text-[10px] text-emerald-605 font-bold flex items-center gap-0.5">
+                            {geminiKey ? '✓ Connected' : '✓ Connected (Workspace)'}
+                          </span>
                         ) : apiConnectionStatus === 'checking' ? (
                           <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
                             <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-500" />
@@ -1196,7 +1200,7 @@ export default function AIAgentsPage() {
                         ) : geminiKey ? (
                           <span className="text-[10px] text-emerald-650 font-bold flex items-center gap-0.5">✓ Key Saved</span>
                         ) : (
-                          <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
+                          <span className="text-[10px] text-zinc-400">Falls back to workspace key if empty</span>
                         )}
                       </div>
                       <div className="relative">
