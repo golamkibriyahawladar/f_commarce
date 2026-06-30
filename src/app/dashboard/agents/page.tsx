@@ -218,7 +218,11 @@ export default function AIAgentsPage() {
       if (data.models && data.models.length > 0) {
         setModelsList(data.models);
         const activeModel = currentModelName || modelName;
-        if (forceSelectFirst || !data.models.includes(activeModel)) {
+        if (forceSelectFirst) {
+          setModelName(data.models[0]);
+        } else if (activeModel) {
+          setModelName(activeModel);
+        } else {
           setModelName(data.models[0]);
         }
         setApiConnectionStatus('connected');
@@ -232,7 +236,11 @@ export default function AIAgentsPage() {
         : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-2.0-flash-exp'];
       setModelsList(fallbacks);
       const activeModel = currentModelName || modelName;
-      if (forceSelectFirst || !fallbacks.includes(activeModel)) {
+      if (forceSelectFirst) {
+        setModelName(fallbacks[0]);
+      } else if (activeModel) {
+        setModelName(activeModel);
+      } else {
         setModelName(fallbacks[0]);
       }
       setApiConnectionStatus('disconnected');
@@ -1046,26 +1054,23 @@ export default function AIAgentsPage() {
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
                       <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">LLM Provider</label>
-                      {apiConnectionStatus === 'connected' && (
+                      {apiConnectionStatus === 'connected' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
                           Connected
                         </span>
-                      )}
-                      {apiConnectionStatus === 'disconnected' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
-                          Not Connected
-                        </span>
-                      )}
-                      {apiConnectionStatus === 'checking' && (
+                      ) : apiConnectionStatus === 'checking' ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-650 border border-zinc-200">
                           <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-zinc-500" />
                           Verifying...
                         </span>
-                      )}
-                      {apiConnectionStatus === 'idle' && (
+                      ) : (llmProvider === 'openai' ? openaiKey : geminiKey) ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ✓ Key Saved
+                        </span>
+                      ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-50 text-zinc-450 border border-zinc-200">
-                          Idle
+                          Optional
                         </span>
                       )}
                     </div>
@@ -1129,8 +1134,13 @@ export default function AIAgentsPage() {
                         <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom OpenAI Key (Optional)</label>
                         {apiConnectionStatus === 'connected' ? (
                           <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">✓ Connected</span>
-                        ) : apiConnectionStatus === 'disconnected' ? (
-                          <span className="text-[10px] text-red-500 font-bold flex items-center gap-0.5">✕ Not Connected</span>
+                        ) : apiConnectionStatus === 'checking' ? (
+                          <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-500" />
+                            Verifying...
+                          </span>
+                        ) : openaiKey ? (
+                          <span className="text-[10px] text-emerald-650 font-bold flex items-center gap-0.5">✓ Key Saved</span>
                         ) : (
                           <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
                         )}
@@ -1178,8 +1188,13 @@ export default function AIAgentsPage() {
                         <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom Gemini API Key (Optional)</label>
                         {apiConnectionStatus === 'connected' ? (
                           <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">✓ Connected</span>
-                        ) : apiConnectionStatus === 'disconnected' ? (
-                          <span className="text-[10px] text-red-500 font-bold flex items-center gap-0.5">✕ Not Connected</span>
+                        ) : apiConnectionStatus === 'checking' ? (
+                          <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-500" />
+                            Verifying...
+                          </span>
+                        ) : geminiKey ? (
+                          <span className="text-[10px] text-emerald-650 font-bold flex items-center gap-0.5">✓ Key Saved</span>
                         ) : (
                           <span className="text-[10px] text-zinc-400">Falls back to server system key if empty</span>
                         )}
