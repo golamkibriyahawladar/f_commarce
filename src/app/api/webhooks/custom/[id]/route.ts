@@ -116,7 +116,7 @@ async function handleMessageType(
         integration_id: integration.id,
         customer_id: customer.id,
         platform_conversation_id: senderId,
-        platform: 'webhook',
+
         last_message: text,
         last_message_at: new Date().toISOString(),
         unread_count: 1,
@@ -134,6 +134,7 @@ async function handleMessageType(
     await supabase
       .from('conversations')
       .update({
+
         last_message: text,
         last_message_at: new Date().toISOString(),
         unread_count: (conversation.unread_count || 0) + 1

@@ -85,8 +85,8 @@ export const useInboxStore = create<InboxState>((set, get) => ({
 
           return {
             id: conv.id,
-            platform: (conv.integration?.provider as any) || 'facebook',
-            customer_name: conv.customer?.name || (conv.integration?.provider === 'webhook' ? 'Webhook User' : 'Social User'),
+            platform: (conv.integration?.provider === 'developer_api' ? 'webhook' : conv.integration?.provider) || 'facebook',
+            customer_name: conv.customer?.name || (conv.integration?.provider === 'developer_api' ? 'Webhook User' : 'Social User'),
             customer_phone: conv.customer?.phone || '',
             customer_email: conv.customer?.email || '',
             customer_address: conv.customer?.shipping_address?.address || '',
