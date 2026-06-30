@@ -254,22 +254,7 @@ export default function InboxPage() {
             ))}
           </div>
 
-          {/* Status Tabs */}
-          <div className="grid grid-cols-3 bg-zinc-100 p-1 rounded-lg">
-            {(['open', 'snoozed', 'closed'] as const).map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`py-1 text-[10px] font-bold rounded-md capitalize transition-all cursor-pointer ${
-                  filterStatus === status 
-                    ? 'bg-white text-zinc-900 shadow-sm' 
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
+
         </div>
 
         {/* Conversations List */}
