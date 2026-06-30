@@ -142,7 +142,6 @@ export default function InboxPage() {
     setFilterStatus,
     sendMessage,
     toggleAiMode,
-    updateDeliveryStatus,
     fetchConversations,
     subscribeToRealtime,
     loading
@@ -150,9 +149,7 @@ export default function InboxPage() {
 
   const [inputVal, setInputVal] = useState('');
   const [searchVal, setSearchVal] = useState('');
-  const [activeStep, setActiveStep] = useState(1); // 1: Placed, 2: Dispatched, 3: In Transit, 4: Delivered
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
-  const [crmCollapsed, setCrmCollapsed] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -376,14 +373,7 @@ export default function InboxPage() {
                   <span className="hidden sm:inline">AI Co-Pilot {selectedConv.is_ai_mode ? 'ON' : 'OFF'}</span>
                 </button>
 
-                {/* Profile Toggle button (hidden on mobile, dynamic layout on desktop) */}
-                <button
-                  onClick={() => setCrmCollapsed(!crmCollapsed)}
-                  title="Toggle Customer Profile"
-                  className="hidden xl:flex items-center justify-center p-2 text-zinc-500 hover:text-zinc-900 rounded-lg hover:bg-zinc-50 border border-zinc-200 transition-colors cursor-pointer"
-                >
-                  <UserCheck className="w-4 h-4" />
-                </button>
+
               </div>
             </div>
 
@@ -474,75 +464,7 @@ export default function InboxPage() {
         )}
       </div>
 
-      {/* ── COLUMN 3: CRM Profile Details & Tracker Panel ── */}
-      {selectedConv && (
-        <div className={`border-l border-zinc-200 bg-white flex flex-col overflow-y-auto shrink-0 transition-all duration-300 ease-in-out hidden xl:flex p-5 space-y-6 ${
-          crmCollapsed ? 'w-0 border-l-0 p-0 overflow-hidden' : 'w-72'
-        }`}>
-          {/* Customer Metadata Card removed as requested */}
 
-          {/* Logistics & Delivery Tracker Stepper */}
-          <div className={`${crmCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}>
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4">Delivery Status</h3>
-            
-            {/* Vertical timeline stepper */}
-            <div className="space-y-6 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-100">
-              
-              {/* Step 1 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(1); updateDeliveryStatus(selectedConv.id, 'Confirmed (Placed)', profile.company_id); } }}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
-                  activeStep >= 1 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
-                }`}>
-                  <Package className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900">Placed</h4>
-                  <p className="text-[9px] text-zinc-500">Order successfully verified</p>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(2); updateDeliveryStatus(selectedConv.id, 'Dispatched', profile.company_id); } }}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
-                  activeStep >= 2 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
-                }`}>
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900">Dispatched</h4>
-                  <p className="text-[9px] text-zinc-500">Passed to Steadfast logistics</p>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(3); updateDeliveryStatus(selectedConv.id, 'In Transit', profile.company_id); } }}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
-                  activeStep >= 3 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
-                }`}>
-                  <Truck className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900">In Transit</h4>
-                  <p className="text-[9px] text-zinc-500">Package on its way to recipient</p>
-                </div>
-              </div>
-
-              {/* Step 4 */}
-              <div className="flex gap-4 relative items-start cursor-pointer" onClick={() => { if (profile?.company_id) { setActiveStep(4); updateDeliveryStatus(selectedConv.id, 'Delivered', profile.company_id); } }}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 ${
-                  activeStep >= 4 ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-400'
-                }`}>
-                  <CheckCircle className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-900">Delivered</h4>
-                  <p className="text-[9px] text-zinc-500">Successfully hand over & paid</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
