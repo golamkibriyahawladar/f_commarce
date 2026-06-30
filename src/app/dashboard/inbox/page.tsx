@@ -479,37 +479,10 @@ export default function InboxPage() {
         <div className={`border-l border-zinc-200 bg-white flex flex-col overflow-y-auto shrink-0 transition-all duration-300 ease-in-out hidden xl:flex p-5 space-y-6 ${
           crmCollapsed ? 'w-0 border-l-0 p-0 overflow-hidden' : 'w-72'
         }`}>
-          {/* Customer Metadata Card */}
-          <div className={`${crmCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}>
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4">Customer profile</h3>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-zinc-700 text-lg">
-                {selectedConv.customer_name.charAt(0)}
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-zinc-900">{selectedConv.customer_name}</h4>
-                <p className="text-[10px] text-zinc-500 capitalize">{selectedConv.platform}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs text-zinc-600 border-t border-zinc-100 pt-4">
-              <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-zinc-400" />
-                <span>{selectedConv.customer_phone}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="w-3.5 h-3.5 text-zinc-400" />
-                <span>{selectedConv.customer_email}</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <MapPin className="w-3.5 h-3.5 text-zinc-400 mt-0.5 shrink-0" />
-                <span className="leading-tight">{selectedConv.customer_address}</span>
-              </div>
-            </div>
-          </div>
+          {/* Customer Metadata Card removed as requested */}
 
           {/* Logistics & Delivery Tracker Stepper */}
-          <div className={`border-t border-zinc-100 pt-6 ${crmCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}>
+          <div className={`${crmCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}>
             <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4">Delivery Status</h3>
             
             {/* Vertical timeline stepper */}
