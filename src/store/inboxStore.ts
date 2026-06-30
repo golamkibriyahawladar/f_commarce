@@ -50,7 +50,26 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   filterPlatform: 'all',
   filterStatus: 'open',
 
-  setSelectedConversationId: (id) => set({ selectedConversationId: id }),
+  setSelectedConversationId: async (id) => {
+    set({ selectedConversationId: id });
+    if (id) {
+      // Optimistically clear the unread count in state
+      set((state) => ({
+        conversations: state.conversations.map(c => 
+          c.id === id ? { ...c, unread_count: 0 } : c
+        )
+      }));
+      // Update in database
+      try {
+        await supabase
+          .from('conversations')
+          .update({ unread_count: 0 })
+          .eq('id', id);
+      } catch (err) {
+        console.error('Failed to mark conversation as read:', err);
+      }
+    }
+  },
   
   setFilterPlatform: (platform) => set({ filterPlatform: platform }),
   
@@ -222,6 +241,7 @@ export const useInboxStore = create<InboxState>((set, get) => ({
             ...c,
             last_message: content,
             last_message_at: tempMsg.created_at,
+            unread_count: 0,
             messages: [...c.messages, tempMsg]
           };
         }
