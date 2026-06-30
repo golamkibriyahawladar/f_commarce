@@ -116,6 +116,7 @@ async function handleMessageType(
         integration_id: integration.id,
         customer_id: customer.id,
         platform_conversation_id: senderId,
+        platform: 'webhook',
         last_message: text,
         last_message_at: new Date().toISOString(),
         unread_count: 1,

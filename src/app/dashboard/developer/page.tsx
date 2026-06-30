@@ -60,6 +60,11 @@ export default function DeveloperPage() {
   const [expandedSchema, setExpandedSchema] = useState<string | null>('message');
   const [initializingIntegration, setInitializingIntegration] = useState(false);
 
+  // Outgoing Webhook State
+  const [outgoingUrl, setOutgoingUrl] = useState('');
+  const [outgoingSecret, setOutgoingSecret] = useState('');
+  const [savingWebhook, setSavingWebhook] = useState(false);
+
   // Delete modal state
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; tokenId: string; tokenName: string }>({ open: false, tokenId: '', tokenName: '' });
   const [deleting, setDeleting] = useState(false);
@@ -146,12 +151,57 @@ export default function DeveloperPage() {
     }
   }, [profile?.company_id]);
 
+  // Fetch outgoing webhook
+  const fetchOutgoingWebhook = useCallback(async () => {
+    if (!profile?.company_id) return;
+    try {
+      const token = await getAuthHeader();
+      const res = await fetch('/api/integrations/webhook', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.webhook) {
+        setOutgoingUrl(data.webhook.webhook_url || '');
+        setOutgoingSecret(data.webhook.webhook_secret || '');
+      }
+    } catch (err) {
+      console.error('Error fetching outgoing webhook:', err);
+    }
+  }, [profile?.company_id]);
+
   useEffect(() => {
     if (profile?.company_id) {
       initializeDeveloperIntegration();
       fetchTokens();
+      fetchOutgoingWebhook();
     }
-  }, [profile?.company_id, initializeDeveloperIntegration, fetchTokens]);
+  }, [profile?.company_id, initializeDeveloperIntegration, fetchTokens, fetchOutgoingWebhook]);
+
+  // Save outgoing webhook
+  const handleSaveOutgoingWebhook = async () => {
+    setSavingWebhook(true);
+    try {
+      const authToken = await getAuthHeader();
+      const res = await fetch('/api/integrations/webhook', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ webhook_url: outgoingUrl, webhook_secret: outgoingSecret })
+      });
+      if (res.ok) {
+        showToast('Outgoing webhook saved successfully!', 'success');
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Failed to save webhook.', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to save webhook.', 'error');
+    } finally {
+      setSavingWebhook(false);
+    }
+  };
 
   // Generate token
   const handleGenerateToken = async () => {
@@ -686,6 +736,49 @@ export default function DeveloperPage() {
     or missing Bearer token."
 }`}
                 </pre>
+              </div>
+            </div>
+          </div>
+
+          {/* Outgoing Webhook Settings */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden mb-6">
+            <div className="p-5 border-b border-zinc-100">
+              <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-violet-500" />
+                Outgoing Webhook (Receive Events)
+              </h2>
+              <p className="text-[10px] text-zinc-500 mt-0.5">Enter a URL to receive real-time HTTP POST requests when an agent or AI replies to your customers.</p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1.5">Webhook URL</label>
+                <input
+                  type="url"
+                  placeholder="https://your-domain.com/webhook"
+                  value={outgoingUrl}
+                  onChange={(e) => setOutgoingUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-shadow"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1.5">Webhook Secret (Optional)</label>
+                <input
+                  type="password"
+                  placeholder="Secret key to verify payload signature"
+                  value={outgoingSecret}
+                  onChange={(e) => setOutgoingSecret(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-shadow"
+                />
+              </div>
+              <div className="pt-2">
+                <button
+                  onClick={handleSaveOutgoingWebhook}
+                  disabled={savingWebhook}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {savingWebhook ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Save Webhook
+                </button>
               </div>
             </div>
           </div>
