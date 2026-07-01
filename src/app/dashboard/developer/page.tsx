@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import {
@@ -383,12 +384,12 @@ export default function DeveloperPage() {
 
       {/* Tabs */}
       <div className="flex space-x-6 border-b border-zinc-200 mb-8">
-        <a href="/dashboard/integrations" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+        <Link href="/dashboard/integrations" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
           Integrations
-        </a>
-        <a href="/dashboard/developer" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
+        </Link>
+        <Link href="/dashboard/developer" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
           Developer API
-        </a>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Facebook, 
   Instagram, 
@@ -339,12 +340,12 @@ export default function IntegrationsPage() {
 
       {/* Tabs */}
       <div className="flex space-x-6 border-b border-zinc-200 mb-8">
-        <a href="/dashboard/integrations" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
+        <Link href="/dashboard/integrations" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
           Integrations
-        </a>
-        <a href="/dashboard/developer" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+        </Link>
+        <Link href="/dashboard/developer" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
           Developer API
-        </a>
+        </Link>
       </div>
 
       {/* Connected Integrations List */}
