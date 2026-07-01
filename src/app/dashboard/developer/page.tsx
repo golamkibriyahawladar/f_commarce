@@ -374,16 +374,21 @@ export default function DeveloperPage() {
     <div className="p-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2.5 bg-violet-50 rounded-xl border border-violet-100">
-            <Code2 className="w-6 h-6 text-violet-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Developer API</h1>
-            <p className="text-sm text-zinc-500">Send messages, leads, and customer data to your workspace via webhook.</p>
-          </div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Apps & API</h1>
+          <p className="text-sm text-zinc-500 mt-1">Connect and manage your social channels, messaging apps, and custom webhooks.</p>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex space-x-6 border-b border-zinc-200 mb-8">
+        <a href="/dashboard/integrations" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+          Integrations
+        </a>
+        <a href="/dashboard/developer" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
+          Developer API
+        </a>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

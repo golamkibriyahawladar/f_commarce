@@ -323,9 +323,9 @@ export default function IntegrationsPage() {
     <div className="p-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       
       {/* Header section */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Integrations</h1>
+          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Apps & API</h1>
           <p className="text-sm text-zinc-500 mt-1">Connect and manage your social channels, messaging apps, and custom webhooks.</p>
         </div>
         <button 
@@ -335,6 +335,16 @@ export default function IntegrationsPage() {
           <Plus className="w-4 h-4" />
           Add Integration
         </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex space-x-6 border-b border-zinc-200 mb-8">
+        <a href="/dashboard/integrations" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
+          Integrations
+        </a>
+        <a href="/dashboard/developer" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+          Developer API
+        </a>
       </div>
 
       {/* Connected Integrations List */}

@@ -97,9 +97,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: '/dashboard/inbox', icon: <MessageSquare className="w-5 h-5" />, label: 'Omnichannel Inbox' },
     { href: '/dashboard/leads', icon: <FileText className="w-5 h-5" />, label: 'Meta Leads' },
     { href: '/dashboard/crm', icon: <Users className="w-5 h-5" />, label: 'CRM & Delivery' },
-    { href: '/dashboard/integrations', icon: <Plug className="w-5 h-5" />, label: 'Integrations' },
+    { href: '/dashboard/integrations', icon: <Plug className="w-5 h-5" />, label: 'Apps & API' },
     { href: '/dashboard/agents', icon: <UserCheck className="w-5 h-5" />, label: 'Agents' },
-    { href: '/dashboard/developer', icon: <Code2 className="w-5 h-5" />, label: 'Developer API' },
+
     ...(SUPER_ADMIN_EMAILS.includes(profile?.email || '') 
       ? [{ href: '/dashboard/super-admin', icon: <ShieldAlert className="w-5 h-5 text-red-500" />, label: 'Super Admin Hub' }] 
       : []
