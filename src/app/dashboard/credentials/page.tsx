@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/lib/supabase';
-import { 
-  Key, 
-  Brain, 
+import {
+  Key,
+  Brain,
   Database,
   CheckCircle,
   Loader2,
@@ -22,7 +22,7 @@ export default function CredentialsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<any>({});
-  
+
   // States for keys
   const [openaiKey, setOpenaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
@@ -48,9 +48,9 @@ export default function CredentialsPage() {
     return session?.access_token || '';
   };
 
-  const fetchSettings = useCallback(async () => {
+  const fetchSettings = useCallback(async (silent = false) => {
     if (!profile?.company_id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const token = await getAuthHeader();
       const res = await fetch('/api/company-settings', {
@@ -82,7 +82,7 @@ export default function CredentialsPage() {
     try {
       const token = await getAuthHeader();
       const payload = { [keyType]: value };
-      
+
       const res = await fetch('/api/company-settings', {
         method: 'POST',
         headers: {
@@ -94,7 +94,7 @@ export default function CredentialsPage() {
 
       if (res.ok) {
         showToast('Credential saved successfully!', 'success');
-        fetchSettings();
+        fetchSettings(true);
       } else {
         const err = await res.json();
         showToast(err.error || 'Failed to save credential', 'error');
@@ -111,16 +111,16 @@ export default function CredentialsPage() {
   };
 
   const renderCard = (
-    title: string, 
-    description: string, 
-    icon: React.ReactNode, 
-    value: string, 
-    setValue: (val: string) => void, 
+    title: string,
+    description: string,
+    icon: React.ReactNode,
+    value: string,
+    setValue: (val: string) => void,
     dbKey: string,
     extraField?: { value: string, setValue: (val: string) => void, dbKey: string, placeholder: string }
   ) => {
     const isConnected = !!settings[dbKey];
-    
+
     return (
       <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
         <div className="flex justify-between items-start mb-4">
@@ -150,7 +150,7 @@ export default function CredentialsPage() {
               placeholder={`Enter ${title} API Key`}
               className="w-full pl-3 pr-10 py-2.5 border border-zinc-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-50 text-zinc-800"
             />
-            <button 
+            <button
               type="button"
               onClick={() => toggleShowKey(dbKey)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
@@ -186,7 +186,7 @@ export default function CredentialsPage() {
                     }).then(res => {
                       if (res.ok) {
                         showToast('Credentials saved successfully!', 'success');
-                        fetchSettings();
+                        fetchSettings(true);
                       } else {
                         showToast('Failed to save credential', 'error');
                       }
@@ -210,12 +210,11 @@ export default function CredentialsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-      
+
       {/* Toast Notification */}
       {toast.visible && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-top-2 ${
-          toast.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-red-50 text-red-900 border-red-200'
-        }`}>
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-top-2 ${toast.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-red-50 text-red-900 border-red-200'
+          }`}>
           {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-red-600" />}
           <p className="text-sm font-semibold">{toast.message}</p>
         </div>
@@ -249,38 +248,38 @@ export default function CredentialsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {renderCard(
-            'OpenAI', 
-            'For GPT-4, GPT-3.5 models', 
-            <Brain className="w-6 h-6 text-emerald-600" />, 
-            openaiKey, 
-            setOpenaiKey, 
+            'OpenAI',
+            'For OpenAI models',
+            <Brain className="w-6 h-6 text-emerald-600" />,
+            openaiKey,
+            setOpenaiKey,
             'global_openai_key'
           )}
-          
+
           {renderCard(
-            'Gemini', 
-            'For Google Gemini models', 
-            <Brain className="w-6 h-6 text-blue-500" />, 
-            geminiKey, 
-            setGeminiKey, 
+            'Gemini',
+            'For Google Gemini models',
+            <Brain className="w-6 h-6 text-blue-500" />,
+            geminiKey,
+            setGeminiKey,
             'global_gemini_key'
           )}
-          
+
           {renderCard(
-            'OpenRouter', 
-            'Access Claude, Meta Llama, etc.', 
-            <Brain className="w-6 h-6 text-indigo-500" />, 
-            openrouterKey, 
-            setOpenrouterKey, 
+            'OpenRouter',
+            'Access Claude, Meta Llama, etc.',
+            <Brain className="w-6 h-6 text-indigo-500" />,
+            openrouterKey,
+            setOpenrouterKey,
             'global_openrouter_key'
           )}
-          
+
           {renderCard(
-            'Pinecone DB', 
-            'Vector Database for RAG & Memory', 
-            <Database className="w-6 h-6 text-cyan-600" />, 
-            pineconeKey, 
-            setPineconeKey, 
+            'Pinecone DB',
+            'Vector Database for RAG & Memory',
+            <Database className="w-6 h-6 text-cyan-600" />,
+            pineconeKey,
+            setPineconeKey,
             'global_pinecone_key',
             { value: pineconeEnv, setValue: setPineconeEnv, dbKey: 'global_pinecone_env', placeholder: 'Pinecone Index Name' }
           )}

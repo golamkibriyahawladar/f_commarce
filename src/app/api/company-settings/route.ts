@@ -93,7 +93,7 @@ export async function POST(req: Request) {
 
     const { error } = await supabase
       .from('companies')
-      .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+      .update({ settings: updatedSettings })
       .eq('id', companyId);
 
     if (error) throw error;
