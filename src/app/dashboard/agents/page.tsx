@@ -193,20 +193,17 @@ export default function AIAgentsPage() {
     }
   };
 
-  const syncModels = async (provider: 'openai' | 'gemini', apiKeyVal?: string, forceSelectFirst = false, currentModelName?: string, agentIdOverride?: string) => {
+  const syncModels = async (provider: string, forceSelectFirst = false, currentModelName?: string) => {
     if (!profile?.company_id) return;
     setLoadingModels(true);
     setApiConnectionStatus('checking');
     try {
-      const keyToUse = apiKeyVal !== undefined ? apiKeyVal : (provider === 'openai' ? openaiKey : geminiKey);
       const res = await fetch('/api/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          apiKey: keyToUse,
-          companyId: profile.company_id,
-          agentId: agentIdOverride || selectedAgent?.id
+          companyId: profile.company_id
         })
       });
 
@@ -250,7 +247,7 @@ export default function AIAgentsPage() {
   };
 
   // Fetch Pinecone indexes dynamically
-  const syncPineconeIndexes = async (apiKeyVal?: string, agentIdOverride?: string) => {
+  const syncPineconeIndexes = async () => {
     if (!profile?.company_id) return;
     setPineconeConnectionStatus('checking');
     setLoadingPineconeIndexes(true);
@@ -260,9 +257,7 @@ export default function AIAgentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'listIndexes',
-          apiKey: apiKeyVal !== undefined ? apiKeyVal : pineconeApiKey,
-          companyId: profile.company_id,
-          agentId: agentIdOverride || selectedAgent?.id
+          companyId: profile.company_id
         })
       });
       const data = await res.json();
@@ -364,7 +359,7 @@ export default function AIAgentsPage() {
     setActiveTools([]);
     
     setShowKey(false);
-    syncModels('openai', '');
+    syncModels('openai', true);
     setModalOpen(true);
   };
 
@@ -383,18 +378,15 @@ export default function AIAgentsPage() {
     // Model settings
     setLlmProvider(creds.llm_provider || 'openai');
     setModelName(creds.model_name || (creds.llm_provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'));
-    setOpenaiKey(creds.openai_key ? '••••••••' : '');
-    setGeminiKey(creds.gemini_key ? '••••••••' : '');
     
     // Pinecone settings
-    setPineconeApiKey(creds.pinecone_api_key ? '••••••••' : '');
     setPineconeIndex(creds.pinecone_index || '');
     setPineconeNamespace(creds.pinecone_namespace || '');
     setEmbeddingProvider(creds.embedding_provider || 'openai');
     
     // KB states
     setPineconeIndexes(creds.pinecone_index ? [creds.pinecone_index] : []);
-    setPineconeConnectionStatus(creds.pinecone_api_key ? 'connected' : 'idle');
+    setPineconeConnectionStatus('idle'); // Will check automatically
     setLoadingPineconeIndexes(false);
     setIngestMode('file');
     setRawTextTitle('');
@@ -410,14 +402,11 @@ export default function AIAgentsPage() {
     
     // Fetch files and Pinecone indexes in background
     fetchKbFiles(agent.id);
-    if (creds.pinecone_api_key) {
-      syncPineconeIndexes('••••••••', agent.id);
-    }
+    syncPineconeIndexes();
     
     const activeProvider = creds.llm_provider || 'openai';
-    const activeKey = activeProvider === 'openai' ? (creds.openai_key ? '••••••••' : '') : (creds.gemini_key ? '••••••••' : '');
     const activeModel = creds.model_name || (activeProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini');
-    syncModels(activeProvider, activeKey, false, activeModel, agent.id);
+    syncModels(activeProvider, false, activeModel);
     
     setModalOpen(true);
   };
@@ -527,28 +516,11 @@ export default function AIAgentsPage() {
     setSaving(true);
 
     try {
-      // Determine keys (use past values if masked)
-      let finalOpenaiKey = openaiKey;
-      if (selectedAgent && openaiKey === '••••••••') {
-        finalOpenaiKey = selectedAgent.credentials.openai_key || '';
-      }
-      let finalGeminiKey = geminiKey;
-      if (selectedAgent && geminiKey === '••••••••') {
-        finalGeminiKey = selectedAgent.credentials.gemini_key || '';
-      }
-      let finalPineconeKey = pineconeApiKey;
-      if (selectedAgent && pineconeApiKey === '••••••••') {
-        finalPineconeKey = selectedAgent.credentials.pinecone_api_key || '';
-      }
-
       const credentials = {
         name: agentName.trim(),
         system_prompt: systemPrompt.trim(),
         llm_provider: llmProvider,
         model_name: modelName || (llmProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'),
-        openai_key: finalOpenaiKey.trim(),
-        gemini_key: finalGeminiKey.trim(),
-        pinecone_api_key: finalPineconeKey.trim(),
         pinecone_index: pineconeIndex.trim(),
         pinecone_namespace: pineconeNamespace.trim(),
         embedding_provider: embeddingProvider,
@@ -1077,14 +1049,16 @@ export default function AIAgentsPage() {
                     <select
                       value={llmProvider}
                       onChange={(e) => {
-                        const prov = e.target.value as 'openai' | 'gemini';
+                        const prov = e.target.value as any;
                         setLlmProvider(prov);
-                        syncModels(prov, prov === 'openai' ? openaiKey : geminiKey, true);
+                        syncModels(prov, true);
                       }}
                       className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
                     >
                       <option value="openai">OpenAI (GPT Models)</option>
                       <option value="gemini">Google Gemini</option>
+                      <option value="openrouter">OpenRouter (Claude, Llama, etc)</option>
+                      <option value="ollama">Ollama (Local Models)</option>
                     </select>
                   </div>
 
@@ -1128,119 +1102,7 @@ export default function AIAgentsPage() {
                     </select>
                   </div>
 
-                  {llmProvider === 'openai' ? (
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom OpenAI Key (Optional)</label>
-                        {apiConnectionStatus === 'connected' ? (
-                          <span className="text-[10px] text-emerald-605 font-bold flex items-center gap-0.5">
-                            {openaiKey ? '✓ Connected' : '✓ Connected (Workspace)'}
-                          </span>
-                        ) : apiConnectionStatus === 'checking' ? (
-                          <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
-                            <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-500" />
-                            Verifying...
-                          </span>
-                        ) : openaiKey ? (
-                          <span className="text-[10px] text-emerald-650 font-bold flex items-center gap-0.5">✓ Key Saved</span>
-                        ) : (
-                          <span className="text-[10px] text-zinc-400">Falls back to workspace key if empty</span>
-                        )}
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type={showKey ? 'text' : 'password'} 
-                          placeholder="sk-proj-..."
-                          value={openaiKey}
-                          onChange={(e) => setOpenaiKey(e.target.value)}
-                          onBlur={() => syncModels('openai', openaiKey, true)}
-                          className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowKey(!showKey)}
-                          className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-700 cursor-pointer"
-                        >
-                          {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      
-                      {/* Connect Button */}
-                      <div className="flex justify-end mt-2">
-                        <button
-                          type="button"
-                          onClick={() => syncModels('openai', openaiKey, true)}
-                          disabled={loadingModels}
-                          className="flex items-center gap-1 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          {loadingModels ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>Connecting...</span>
-                            </>
-                          ) : (
-                            <span>Connect API</span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Custom Gemini API Key (Optional)</label>
-                        {apiConnectionStatus === 'connected' ? (
-                          <span className="text-[10px] text-emerald-605 font-bold flex items-center gap-0.5">
-                            {geminiKey ? '✓ Connected' : '✓ Connected (Workspace)'}
-                          </span>
-                        ) : apiConnectionStatus === 'checking' ? (
-                          <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
-                            <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-500" />
-                            Verifying...
-                          </span>
-                        ) : geminiKey ? (
-                          <span className="text-[10px] text-emerald-650 font-bold flex items-center gap-0.5">✓ Key Saved</span>
-                        ) : (
-                          <span className="text-[10px] text-zinc-400">Falls back to workspace key if empty</span>
-                        )}
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type={showGeminiKey ? 'text' : 'password'} 
-                          placeholder="AIzaSy..."
-                          value={geminiKey}
-                          onChange={(e) => setGeminiKey(e.target.value)}
-                          onBlur={() => syncModels('gemini', geminiKey, true)}
-                          className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowGeminiKey(!showGeminiKey)}
-                          className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-705 cursor-pointer"
-                        >
-                          {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-
-                      {/* Connect Button */}
-                      <div className="flex justify-end mt-2">
-                        <button
-                          type="button"
-                          onClick={() => syncModels('gemini', geminiKey, true)}
-                          disabled={loadingModels}
-                          className="flex items-center gap-1 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          {loadingModels ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>Connecting...</span>
-                            </>
-                          ) : (
-                            <span>Connect API</span>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {/* Custom API Key inputs removed, now managed globally in Credentials tab */}
                 </div>
               )}
 
@@ -1257,63 +1119,7 @@ export default function AIAgentsPage() {
                     </div>
                   </div>
 
-                  {/* Pinecone API Key */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Pinecone API Key</label>
-                      {pineconeConnectionStatus === 'connected' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
-                          Connected
-                        </span>
-                      )}
-                      {pineconeConnectionStatus === 'disconnected' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
-                          Not Connected
-                        </span>
-                      )}
-                      {pineconeConnectionStatus === 'checking' && (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-100 text-zinc-650 border border-zinc-200">
-                          <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-zinc-500" />
-                          Connecting...
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <input 
-                        type={showPineconeKey ? 'text' : 'password'} 
-                        placeholder="pc_key_..."
-                        value={pineconeApiKey}
-                        onChange={(e) => setPineconeApiKey(e.target.value)}
-                        className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPineconeKey(!showPineconeKey)}
-                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-700 cursor-pointer"
-                      >
-                        {showPineconeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <div className="flex justify-end mt-1">
-                      <button
-                        type="button"
-                        onClick={() => syncPineconeIndexes(pineconeApiKey)}
-                        disabled={loadingPineconeIndexes || !pineconeApiKey}
-                        className="flex items-center gap-1 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {loadingPineconeIndexes ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Connecting...</span>
-                          </>
-                        ) : (
-                          <span>Connect Pinecone</span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
+                  {/* Pinecone API Key removed, now managed globally in Credentials tab */}
                   {/* Index + Namespace */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">

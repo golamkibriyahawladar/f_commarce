@@ -17,11 +17,12 @@ CREATE TABLE IF NOT EXISTS webhook_tokens (
 -- RLS
 ALTER TABLE webhook_tokens ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "webhook_tokens_company_isolation" ON webhook_tokens;
 CREATE POLICY "webhook_tokens_company_isolation" ON webhook_tokens
 FOR ALL USING (
   company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
 );
 
 -- Index for fast token lookups
-CREATE INDEX idx_webhook_tokens_token ON webhook_tokens(token);
-CREATE INDEX idx_webhook_tokens_company ON webhook_tokens(company_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_tokens_token ON webhook_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_webhook_tokens_company ON webhook_tokens(company_id);

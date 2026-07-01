@@ -33,23 +33,6 @@ export async function POST(req: Request) {
     // If key is provided and not masked, use it
     if (apiKey && apiKey !== '••••••••' && apiKey.trim() !== '') {
       resolvedKey = apiKey.trim();
-    } else {
-      // 1. If agentId is provided, try loading agent's credentials
-      if (agentId) {
-        const { data: agent } = await supabase
-          .from('integrations')
-          .select('credentials')
-          .eq('id', agentId)
-          .eq('company_id', companyId)
-          .maybeSingle();
-        
-        if (agent?.credentials) {
-          resolvedKey = provider === 'openai' 
-            ? agent.credentials.openai_key 
-            : agent.credentials.gemini_key;
-        }
-      }
-      
       // 2. If no agent custom key, check user's company settings key
       if (!resolvedKey && companyId) {
         const { data: company } = await supabase
@@ -59,23 +42,15 @@ export async function POST(req: Request) {
           .maybeSingle();
         
         if (company?.settings) {
-          resolvedKey = provider === 'openai'
-            ? (company.settings.openai_key || company.settings.openaiKey)
-            : (company.settings.gemini_key || company.settings.geminiKey);
+          if (provider === 'openai') resolvedKey = company.settings.global_openai_key;
+          else if (provider === 'gemini') resolvedKey = company.settings.global_gemini_key;
+          else if (provider === 'openrouter') resolvedKey = company.settings.global_openrouter_key;
         }
-      }
-
-      // 3. Fall back to system admin settings key
-      if (!resolvedKey) {
-        const globalSettings = await getGlobalSettings(supabase);
-        resolvedKey = provider === 'openai'
-          ? globalSettings.global_openai_key
-          : globalSettings.global_gemini_key;
       }
     }
 
-    if (!resolvedKey) {
-      return NextResponse.json({ error: `No API key configured for ${provider}. Please enter a key.` }, { status: 400 });
+    if (!resolvedKey && provider !== 'ollama') {
+      return NextResponse.json({ error: `No API key configured for ${provider}. Please enter a key in the Credentials tab.` }, { status: 400 });
     }
 
     if (provider === 'openai') {
@@ -123,6 +98,33 @@ export async function POST(req: Request) {
         .sort();
 
       return NextResponse.json({ success: true, models });
+    } else if (provider === 'openrouter') {
+      const response = await fetch('https://openrouter.ai/api/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${resolvedKey}`
+        }
+      });
+
+      if (!response.ok) {
+        return NextResponse.json({ error: 'OpenRouter API request failed' }, { status: response.status });
+      }
+
+      const data = await response.json();
+      const models = (data.data || []).map((m: any) => m.id).sort();
+
+      return NextResponse.json({ success: true, models });
+    } else if (provider === 'ollama') {
+      try {
+        const response = await fetch('http://localhost:11434/api/tags');
+        if (!response.ok) {
+          return NextResponse.json({ error: 'Ollama is not running locally.' }, { status: 500 });
+        }
+        const data = await response.json();
+        const models = (data.models || []).map((m: any) => m.name).sort();
+        return NextResponse.json({ success: true, models });
+      } catch (err) {
+        return NextResponse.json({ error: 'Ollama is not running on localhost:11434.' }, { status: 500 });
+      }
     } else {
       return NextResponse.json({ error: 'Unsupported provider: ' + provider }, { status: 400 });
     }

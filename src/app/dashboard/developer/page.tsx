@@ -390,6 +390,9 @@ export default function DeveloperPage() {
         <Link href="/dashboard/developer" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
           Developer API
         </Link>
+        <Link href="/dashboard/credentials" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+          Credentials
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

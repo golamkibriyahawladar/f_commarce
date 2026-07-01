@@ -116,8 +116,8 @@ export async function triggerAiReplyIfNeeded(
     let ragContext = '';
 
     if (activeTools.includes('search_knowledge_base')) {
-      const pineconeApiKey = credentials.pinecone_api_key;
-      const pineconeIndex = credentials.pinecone_index;
+      const pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
+      const pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
       const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${assignedAgent.id}`;
       const embeddingProvider = credentials.embedding_provider || 'openai';
 
@@ -126,9 +126,8 @@ export async function triggerAiReplyIfNeeded(
           console.log(`AI Agent '${agentName}' performing RAG search on Pinecone (Namespace: ${pineconeNamespace})...`);
           let queryEmbedding: number[] = [];
 
-          // Generate embedding for query
           if (embeddingProvider === 'openai') {
-            const openaiKey = credentials.openai_key || companySettings.openai_key || companySettings.openaiKey || globalSettings.global_openai_key;
+            const openaiKey = companySettings.global_openai_key || globalSettings.global_openai_key;
             if (openaiKey) {
               const embRes = await fetch('https://api.openai.com/v1/embeddings', {
                 method: 'POST',
@@ -149,7 +148,7 @@ export async function triggerAiReplyIfNeeded(
               }
             }
           } else if (embeddingProvider === 'gemini') {
-            const geminiKey = credentials.gemini_key || companySettings.gemini_key || companySettings.geminiKey || globalSettings.global_gemini_key || globalSettings.global_openai_key;
+            const geminiKey = companySettings.global_gemini_key || globalSettings.global_gemini_key || companySettings.global_openai_key;
             if (geminiKey) {
               const genAI = new GoogleGenerativeAI(geminiKey);
               const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
@@ -209,9 +208,9 @@ ${systemPrompt}`;
     let modelUsed = '';
 
     if (llmProvider === 'openai') {
-      const apiKey = credentials.openai_key || companySettings.openai_key || companySettings.openaiKey || globalSettings.global_openai_key;
+      const apiKey = companySettings.global_openai_key || globalSettings.global_openai_key;
       if (!apiKey) {
-        console.error(`AI Agent '${agentName}' configuration error: Missing OpenAI API Key.`);
+        console.error(`AI Agent '${agentName}' configuration error: Missing OpenAI API Key in global settings.`);
         return;
       }
 
@@ -308,6 +307,98 @@ ${systemPrompt}`;
         execution_time_ms: executionTime,
         model: modelUsed
       });
+    } else if (llmProvider === 'openrouter') {
+      const apiKey = companySettings.global_openrouter_key;
+      if (!apiKey) {
+        console.error(`AI Agent '${agentName}' configuration error: Missing OpenRouter API Key.`);
+        return;
+      }
+
+      modelUsed = credentials.model_name || 'openai/gpt-3.5-turbo';
+      const openAiMessages = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).map(msg => ({
+          role: msg.sender_type === 'customer' ? 'user' : 'assistant',
+          content: msg.content
+        }))
+      ];
+
+      const runStartTime = Date.now();
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelUsed,
+          messages: openAiMessages,
+          temperature: 0.2
+        })
+      });
+
+      const executionTime = Date.now() - runStartTime;
+      if (!res.ok) {
+        const err = await res.json();
+        console.error('OpenRouter API Error:', err);
+        return;
+      }
+      const data = await res.json();
+      aiReplyText = data.choices?.[0]?.message?.content?.trim() || '';
+      
+      const usage = data.usage || {};
+      llmRuns.push({
+        run_index: 0,
+        prompt_tokens: usage.prompt_tokens || estimateTokens(systemPrompt),
+        completion_tokens: usage.completion_tokens || estimateTokens(aiReplyText),
+        total_tokens: usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens),
+        execution_time_ms: executionTime,
+        model: modelUsed
+      });
+    } else if (llmProvider === 'ollama') {
+      modelUsed = credentials.model_name || 'llama3';
+      const openAiMessages = [
+        { role: 'system', content: systemPrompt },
+        ...(history || []).map(msg => ({
+          role: msg.sender_type === 'customer' ? 'user' : 'assistant',
+          content: msg.content
+        }))
+      ];
+
+      const runStartTime = Date.now();
+      try {
+        const res = await fetch('http://localhost:11434/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: modelUsed,
+            messages: openAiMessages,
+            stream: false,
+            options: { temperature: 0.2 }
+          })
+        });
+
+        const executionTime = Date.now() - runStartTime;
+        if (!res.ok) {
+          const err = await res.json();
+          console.error('Ollama Error:', err);
+          return;
+        }
+        const data = await res.json();
+        aiReplyText = data.message?.content?.trim() || '';
+        
+        llmRuns.push({
+          run_index: 0,
+          prompt_tokens: data.prompt_eval_count || estimateTokens(systemPrompt),
+          completion_tokens: data.eval_count || estimateTokens(aiReplyText),
+          total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+          execution_time_ms: executionTime,
+          model: modelUsed
+        });
+      } catch (err) {
+        console.error('Ollama connection error:', err);
+        return;
+      }
     }
 
     if (!aiReplyText) {

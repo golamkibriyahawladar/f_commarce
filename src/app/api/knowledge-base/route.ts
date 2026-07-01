@@ -158,9 +158,19 @@ export async function POST(req: Request) {
     const credentials = agent.credentials || {};
     const embeddingProvider = credentials.embedding_provider || 'openai';
     
+    // Fetch Company Settings
+    const { data: companyData } = await supabaseService
+      .from('companies')
+      .select('settings')
+      .eq('id', companyId)
+      .maybeSingle();
+    const companySettings = companyData?.settings || {};
+    
+    const globalSettings = await getGlobalSettings(supabaseService);
+
     // Pinecone Credentials
-    const pineconeApiKey = credentials.pinecone_api_key;
-    const pineconeIndex = credentials.pinecone_index;
+    const pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
+    const pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
     const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${agentId}`;
 
     if (!pineconeApiKey || !pineconeIndex) {
@@ -240,14 +250,13 @@ export async function POST(req: Request) {
       throw new Error('Failed to create knowledge base file entry: ' + kbFileErr?.message);
     }
 
-    // Load Fallback secrets if needed
-    const globalSettings = await getGlobalSettings(supabaseService);
+    // Fallback settings already loaded
 
     // Generate Embeddings
     const vectors: Array<{ id: string; values: number[]; metadata: { text: string; file_name: string; company_id: string; file_id: string } }> = [];
     
     if (embeddingProvider === 'openai') {
-      const openaiKey = credentials.openai_key || globalSettings.global_openai_key;
+      const openaiKey = companySettings.global_openai_key || globalSettings.global_openai_key;
       if (!openaiKey) {
         throw new Error('OpenAI key missing. Please configure a custom key or set a global fallback key.');
       }
@@ -289,7 +298,7 @@ export async function POST(req: Request) {
         });
       }
     } else if (embeddingProvider === 'gemini') {
-      const geminiKey = credentials.gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key; // using global key or fallback
+      const geminiKey = companySettings.global_gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key; // using global key or fallback
       if (!geminiKey) {
         throw new Error('Gemini API key missing. Please configure a custom key or set a global fallback key.');
       }
@@ -419,8 +428,18 @@ export async function DELETE(req: Request) {
     }
 
     const credentials = agent.credentials || {};
-    const pineconeApiKey = credentials.pinecone_api_key;
-    const pineconeIndex = credentials.pinecone_index;
+    // Fetch Company Settings
+    const { data: companyData } = await supabaseService
+      .from('companies')
+      .select('settings')
+      .eq('id', companyId)
+      .maybeSingle();
+    const companySettings = companyData?.settings || {};
+    
+    const globalSettings = await getGlobalSettings(supabaseService);
+
+    const pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
+    const pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
     const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${agentId}`;
 
     // 3. Purge vectors from Pinecone if details exist
