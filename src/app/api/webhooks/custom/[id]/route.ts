@@ -164,15 +164,22 @@ async function handleMessageType(
   // Dispatch outgoing webhook
   await triggerCompanyWebhooks(integration.company_id, 'message.created', newMsg);
 
-  // Trigger AI reply (only for message type)
-  triggerAiReplyIfNeeded(
+  // Trigger AI reply (only for message type) and wait for it
+  const aiReply = await triggerAiReplyIfNeeded(
     integration.company_id,
     conversation.id,
     integration.id,
     text
-  ).catch(err => console.error('Error invoking AI reply execution loop:', err));
+  ).catch(err => {
+    console.error('Error invoking AI reply execution loop:', err);
+    return null;
+  });
 
-  return NextResponse.json({ success: true, message: newMsg });
+  return NextResponse.json({ 
+    success: true, 
+    message: newMsg,
+    ai_reply: aiReply || null
+  });
 }
 
 async function handleLeadType(

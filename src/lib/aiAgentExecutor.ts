@@ -289,7 +289,7 @@ ${systemPrompt}`;
       });
 
     } else if (llmProvider === 'gemini') {
-      const apiKey = credentials.gemini_key || companySettings.gemini_key || companySettings.geminiKey || globalSettings.global_gemini_key || globalSettings.global_openai_key; // fallback
+      const apiKey = credentials.gemini_key || companySettings.gemini_key || companySettings.geminiKey || globalSettings.global_gemini_key;
       if (!apiKey) {
         console.error(`AI Agent '${agentName}' configuration error: Missing Gemini API Key.`);
         return;
@@ -529,7 +529,9 @@ ${systemPrompt}`;
     await triggerCompanyWebhooks(companyId, 'message.created', savedMsg);
 
     console.log('AI agent auto-reply loop completed successfully with stats:', JSON.stringify(executionStats));
+    return savedMsg;
   } catch (error) {
     console.error('triggerAiReplyIfNeeded failed:', error);
+    return null;
   }
 }
