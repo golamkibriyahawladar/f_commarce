@@ -235,7 +235,7 @@ ${systemPrompt}`;
     let modelUsed = '';
 
     if (llmProvider === 'openai') {
-      const apiKey = companySettings.global_openai_key || globalSettings.global_openai_key;
+      const apiKey = credentials.openai_key || companySettings.global_openai_key || globalSettings.global_openai_key;
       if (!apiKey) {
         console.error(`AI Agent '${agentName}' configuration error: Missing OpenAI API Key in global settings.`);
         return;
@@ -289,7 +289,7 @@ ${systemPrompt}`;
       });
 
     } else if (llmProvider === 'gemini') {
-      const apiKey = credentials.gemini_key || companySettings.gemini_key || companySettings.geminiKey || globalSettings.global_gemini_key;
+      const apiKey = credentials.gemini_key || companySettings.global_gemini_key || globalSettings.global_gemini_key;
       if (!apiKey) {
         console.error(`AI Agent '${agentName}' configuration error: Missing Gemini API Key.`);
         return;
