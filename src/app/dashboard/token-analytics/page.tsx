@@ -11,7 +11,10 @@ import {
   MessageSquare,
   Loader2,
   CalendarDays,
-  BarChart3
+  BarChart3,
+  ChevronDown,
+  ChevronRight,
+  Code
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -39,8 +42,9 @@ interface AgentStats {
   name: string;
   responses: number;
   tokens: number;
+  promptTokens: number;
+  completionTokens: number;
   totalTimeMs: number;
-  models: Set<string>;
 }
 
 export default function TokenAnalyticsPage() {
@@ -48,6 +52,7 @@ export default function TokenAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<AIMessageData[]>([]);
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   
   // Aggregated totals
   const [totalTokens, setTotalTokens] = useState(0);
@@ -84,8 +89,9 @@ export default function TokenAnalyticsPage() {
           
           const agentName = meta.sent_by_ai_agent || 'Unknown Agent';
           const msgTokens = usage.total_tokens || 0;
+          const promptTokens = usage.prompt_tokens || 0;
+          const compTokens = usage.completion_tokens || 0;
           const msgTime = perf.response_time_ms || 0;
-          const modelUsed = perf.model_used || 'Unknown';
 
           tTokens += msgTokens;
 
@@ -94,18 +100,18 @@ export default function TokenAnalyticsPage() {
               name: agentName,
               responses: 0,
               tokens: 0,
-              totalTimeMs: 0,
-              models: new Set()
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTimeMs: 0
             });
           }
 
           const aStat = statsMap.get(agentName)!;
           aStat.responses += 1;
           aStat.tokens += msgTokens;
+          aStat.promptTokens += promptTokens;
+          aStat.completionTokens += compTokens;
           aStat.totalTimeMs += msgTime;
-          if (modelUsed !== 'Unknown') {
-            aStat.models.add(modelUsed);
-          }
         });
 
         setTotalTokens(tTokens);
@@ -129,6 +135,10 @@ export default function TokenAnalyticsPage() {
       </div>
     );
   }
+
+  const toggleAgent = (agentName: string) => {
+    setExpandedAgent(expandedAgent === agentName ? null : agentName);
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -173,7 +183,7 @@ export default function TokenAnalyticsPage() {
         <div className="px-5 py-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
           <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
             <Cpu className="w-4 h-4 text-zinc-500" />
-            Agent Usage Breakdown
+            Agent Usage Breakdown (Click to expand logs)
           </h2>
         </div>
         <div className="overflow-x-auto">
@@ -181,110 +191,119 @@ export default function TokenAnalyticsPage() {
             <thead className="bg-white border-b border-zinc-100 text-[10px] uppercase tracking-wider text-zinc-500">
               <tr>
                 <th className="px-5 py-3 font-semibold">Agent Name</th>
-                <th className="px-5 py-3 font-semibold">Models Used</th>
-                <th className="px-5 py-3 font-semibold text-right">Responses Sent</th>
-                <th className="px-5 py-3 font-semibold text-right">Avg. Response Time</th>
+                <th className="px-5 py-3 font-semibold text-right">Responses</th>
+                <th className="px-5 py-3 font-semibold text-right">Avg. Time</th>
+                <th className="px-5 py-3 font-semibold text-right">Prompt Tokens</th>
+                <th className="px-5 py-3 font-semibold text-right">Output Tokens</th>
                 <th className="px-5 py-3 font-semibold text-right">Total Tokens</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {agentStats.map((agent, idx) => (
-                <tr key={idx} className="hover:bg-zinc-50/50 transition-colors">
-                  <td className="px-5 py-3.5">
-                    <div className="font-semibold text-zinc-900 flex items-center gap-2">
-                      <div className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-[10px]">
-                        <Bot className="w-3.5 h-3.5" />
-                      </div>
-                      {agent.name}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-xs text-zinc-600">
-                    {Array.from(agent.models).join(', ') || 'N/A'}
-                  </td>
-                  <td className="px-5 py-3.5 text-right font-medium text-zinc-700">
-                    {agent.responses.toLocaleString()}
-                  </td>
-                  <td className="px-5 py-3.5 text-right text-xs text-zinc-500">
-                    {agent.responses > 0 ? ((agent.totalTimeMs / agent.responses) / 1000).toFixed(2) : '0'}s
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full text-xs">
-                      <Zap className="w-3 h-3" />
-                      {agent.tokens.toLocaleString()}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {agentStats.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-zinc-500 text-sm">
-                    No AI activity recorded yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Execution Logs */}
-      <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-zinc-200 bg-zinc-50">
-          <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-zinc-500" />
-            Execution Logs (Recent)
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-white border-b border-zinc-100 text-[10px] uppercase tracking-wider text-zinc-500">
-              <tr>
-                <th className="px-5 py-3 font-semibold">Timestamp</th>
-                <th className="px-5 py-3 font-semibold">Agent</th>
-                <th className="px-5 py-3 font-semibold">Response Preview</th>
-                <th className="px-5 py-3 font-semibold text-right">Performance</th>
-                <th className="px-5 py-3 font-semibold text-right">Tokens Used (P/C/T)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {messages.slice(0, 50).map((msg) => {
-                const meta = msg.metadata || {};
-                const stats = meta.execution_stats || {};
-                const usage = stats.usage || {};
-                const perf = stats.performance || {};
-                
-                return (
-                  <tr key={msg.id} className="hover:bg-zinc-50/50 transition-colors">
-                    <td className="px-5 py-3.5 text-xs text-zinc-500 whitespace-nowrap">
-                      {format(new Date(msg.created_at), 'MMM dd, hh:mm a')}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs font-semibold text-zinc-900 whitespace-nowrap flex items-center gap-1.5">
-                      <Bot className="w-3.5 h-3.5 text-emerald-600" />
-                      {meta.sent_by_ai_agent || 'Unknown'}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-zinc-600 max-w-xs truncate" title={msg.content}>
-                      {msg.content}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-[11px] text-zinc-500 whitespace-nowrap">
-                      <div className="font-medium text-zinc-700">{perf.model_used || 'N/A'}</div>
-                      <div className="flex items-center justify-end gap-1 mt-0.5">
-                        <Clock className="w-3 h-3 text-zinc-400" />
-                        {perf.response_time_ms ? (perf.response_time_ms / 1000).toFixed(2) : '0'}s
+                <React.Fragment key={idx}>
+                  <tr 
+                    onClick={() => toggleAgent(agent.name)}
+                    className={`hover:bg-zinc-50 transition-colors cursor-pointer ${expandedAgent === agent.name ? 'bg-zinc-50' : ''}`}
+                  >
+                    <td className="px-5 py-3.5">
+                      <div className="font-semibold text-zinc-900 flex items-center gap-2">
+                        {expandedAgent === agent.name ? (
+                          <ChevronDown className="w-4 h-4 text-zinc-400" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-zinc-400" />
+                        )}
+                        <div className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-[10px] shrink-0">
+                          <Bot className="w-3.5 h-3.5" />
+                        </div>
+                        {agent.name}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-right text-xs whitespace-nowrap">
-                      <div className="font-bold text-amber-600">{usage.total_tokens?.toLocaleString() || 0}</div>
-                      <div className="text-[10px] text-zinc-400 mt-0.5">
-                        {usage.prompt_tokens?.toLocaleString() || 0} / {usage.completion_tokens?.toLocaleString() || 0}
-                      </div>
+                    <td className="px-5 py-3.5 text-right font-medium text-zinc-700">
+                      {agent.responses.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-xs text-zinc-500">
+                      {agent.responses > 0 ? ((agent.totalTimeMs / agent.responses) / 1000).toFixed(2) : '0'}s
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-medium text-zinc-600">
+                      {agent.promptTokens.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-medium text-zinc-600">
+                      {agent.completionTokens.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full text-xs">
+                        <Zap className="w-3 h-3" />
+                        {agent.tokens.toLocaleString()}
+                      </span>
                     </td>
                   </tr>
-                );
-              })}
-              {messages.length === 0 && (
+                  
+                  {/* Expanded Execution Logs */}
+                  {expandedAgent === agent.name && (
+                    <tr>
+                      <td colSpan={6} className="p-0 border-b-2 border-emerald-100">
+                        <div className="bg-zinc-50/80 shadow-inner px-6 py-4">
+                          <h4 className="text-xs font-bold text-zinc-600 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                            <CalendarDays className="w-3.5 h-3.5" />
+                            Execution Logs for {agent.name}
+                          </h4>
+                          <div className="border border-zinc-200 bg-white rounded-xl overflow-hidden">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-semibold">
+                                <tr>
+                                  <th className="px-4 py-2">Timestamp</th>
+                                  <th className="px-4 py-2">Response Preview</th>
+                                  <th className="px-4 py-2">Model Used</th>
+                                  <th className="px-4 py-2 text-right">Time</th>
+                                  <th className="px-4 py-2 text-right">P / C / Total Tokens</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-100">
+                                {messages.filter(m => (m.metadata.sent_by_ai_agent || 'Unknown Agent') === agent.name).map((msg) => {
+                                  const stats = msg.metadata.execution_stats || {};
+                                  const usage = stats.usage || {};
+                                  const perf = stats.performance || {};
+                                  
+                                  return (
+                                    <tr key={msg.id} className="hover:bg-zinc-50/50">
+                                      <td className="px-4 py-2.5 text-zinc-500 whitespace-nowrap">
+                                        {format(new Date(msg.created_at), 'MMM dd, hh:mm a')}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-zinc-700 max-w-xs truncate" title={msg.content}>
+                                        {msg.content}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-zinc-600 font-mono text-[10px]">
+                                        {perf.model_used || 'N/A'}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-right text-zinc-500">
+                                        {perf.response_time_ms ? (perf.response_time_ms / 1000).toFixed(2) : '0'}s
+                                      </td>
+                                      <td className="px-4 py-2.5 text-right">
+                                        <div className="flex items-center justify-end gap-1 font-mono text-[10px]">
+                                          <span className="text-zinc-500" title="Prompt Tokens">{usage.prompt_tokens?.toLocaleString() || 0}</span>
+                                          <span className="text-zinc-300">/</span>
+                                          <span className="text-zinc-500" title="Completion (Output) Tokens">{usage.completion_tokens?.toLocaleString() || 0}</span>
+                                          <span className="text-zinc-300">/</span>
+                                          <span className="font-bold text-amber-600" title="Total Tokens">{usage.total_tokens?.toLocaleString() || 0}</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+              
+              {agentStats.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-zinc-500 text-sm">
-                    No execution logs available.
+                  <td colSpan={6} className="px-5 py-8 text-center text-zinc-500 text-sm">
+                    No AI activity recorded yet.
                   </td>
                 </tr>
               )}
