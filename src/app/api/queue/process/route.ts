@@ -17,9 +17,10 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const maxJobs = body.maxJobs || 10;
-    const delayBetweenMs = body.delayBetweenMs || 500;
+    const delayBetweenMs = body.delayBetweenMs !== undefined ? body.delayBetweenMs : 500;
+    const integrationId = body.integrationId;
 
-    const results = await processQueue({ maxJobs, delayBetweenMs });
+    const results = await processQueue({ maxJobs, delayBetweenMs, integrationId });
 
     return NextResponse.json({
       success: true,

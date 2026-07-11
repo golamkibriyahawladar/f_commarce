@@ -41,27 +41,31 @@ export async function addToAiQueue(
 }
 
 // ─── Pick next job from queue (atomic lock) ─────────────────────────────────
-async function pickNextJob(supabase: ReturnType<typeof getSupabase>) {
-  // Use a transaction-like approach: find oldest pending, update to processing
-  // PostgreSQL's UPDATE ... RETURNING with a subquery ensures atomic pick
+async function pickNextJob(supabase: ReturnType<typeof getSupabase>, integrationId?: string) {
   const { data, error } = await supabase
     .rpc('pick_next_queue_job');
 
   if (error) {
-    // If RPC doesn't exist, fallback to manual pick
-    console.warn('[Queue] RPC not available, using fallback pick');
-    return await fallbackPick(supabase);
+    // If RPC doesn't exist or we have an integrationId (which the RPC might not support yet), fallback to manual pick
+    console.warn('[Queue] RPC not available or using specific integration, using fallback pick');
+    return await fallbackPick(supabase, integrationId);
   }
 
   return data;
 }
 
-async function fallbackPick(supabase: ReturnType<typeof getSupabase>) {
+async function fallbackPick(supabase: ReturnType<typeof getSupabase>, integrationId?: string) {
   // Step 1: Find the oldest pending job
-  const { data: pending, error: findErr } = await supabase
+  let query = supabase
     .from('ai_queue')
     .select('*')
-    .eq('status', 'pending')
+    .eq('status', 'pending');
+
+  if (integrationId) {
+    query = query.eq('integration_id', integrationId);
+  }
+
+  const { data: pending, error: findErr } = await query
     .order('priority', { ascending: false })
     .order('created_at', { ascending: true })
     .limit(1)
@@ -143,9 +147,11 @@ async function processJob(
 export async function processQueue(options?: {
   maxJobs?: number;
   delayBetweenMs?: number;
+  integrationId?: string;
 }) {
   const maxJobs = options?.maxJobs || 10;
   const delayBetweenMs = options?.delayBetweenMs || 500;
+  const integrationId = options?.integrationId;
   const supabase = getSupabase();
 
   const results = {
@@ -156,7 +162,7 @@ export async function processQueue(options?: {
   };
 
   for (let i = 0; i < maxJobs; i++) {
-    const job = await fallbackPick(supabase);
+    const job = await pickNextJob(supabase, integrationId);
 
     if (!job) {
       // No more pending jobs
@@ -179,10 +185,16 @@ export async function processQueue(options?: {
   }
 
   // Count remaining pending jobs
-  const { count } = await supabase
+  let countQuery = supabase
     .from('ai_queue')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'pending');
+
+  if (integrationId) {
+    countQuery = countQuery.eq('integration_id', integrationId);
+  }
+
+  const { count } = await countQuery;
 
   results.remaining = count || 0;
 

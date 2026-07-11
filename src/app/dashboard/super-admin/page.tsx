@@ -108,6 +108,12 @@ export default function SuperAdminDashboard() {
   const [agentOpenaiKey, setAgentOpenaiKey] = useState('');
   const [agentAssignedIntegrations, setAgentAssignedIntegrations] = useState<string[]>([]);
   const [agentStatus, setAgentStatus] = useState<'active' | 'inactive'>('active');
+  
+  // Queue Settings
+  const [queueWorkers, setQueueWorkers] = useState(1);
+  const [queueBatchSize, setQueueBatchSize] = useState(10);
+  const [queueDelayMs, setQueueDelayMs] = useState(1000);
+
   const [showKey, setShowKey] = useState(false);
   const [showGlobalKeys, setShowGlobalKeys] = useState(false);
 
@@ -286,6 +292,12 @@ export default function SuperAdminDashboard() {
     setAgentOpenaiKey('');
     setAgentAssignedIntegrations([]);
     setAgentStatus('active');
+    
+    // Reset Queue Settings
+    setQueueWorkers(1);
+    setQueueBatchSize(10);
+    setQueueDelayMs(1000);
+
     setShowKey(false);
     setAgentModalOpen(true);
   };
@@ -297,6 +309,13 @@ export default function SuperAdminDashboard() {
     setAgentOpenaiKey(agent.credentials.openai_key ? '••••••••' : '');
     setAgentAssignedIntegrations(agent.credentials.assigned_integrations || []);
     setAgentStatus(agent.status === 'active' ? 'active' : 'inactive');
+    
+    // Load Queue Settings
+    const qs = agent.credentials.queue_settings || {};
+    setQueueWorkers(qs.workers || 1);
+    setQueueBatchSize(qs.batch_size || 10);
+    setQueueDelayMs(qs.delay_ms !== undefined ? qs.delay_ms : 1000);
+
     setShowKey(false);
     setAgentModalOpen(true);
   };
@@ -333,7 +352,12 @@ export default function SuperAdminDashboard() {
             systemPrompt: agentSystemPrompt,
             openaiKey: finalKey,
             assignedIntegrations: agentAssignedIntegrations,
-            status: agentStatus
+            status: agentStatus,
+            queue_settings: {
+              workers: queueWorkers,
+              batch_size: queueBatchSize,
+              delay_ms: queueDelayMs
+            }
           }
         })
       });
@@ -1072,6 +1096,54 @@ export default function SuperAdminDashboard() {
                   >
                     Inactive
                   </button>
+                </div>
+              </div>
+
+              {/* Queue Orchestrator Settings */}
+              <div className="flex items-center justify-between border-t border-zinc-100 pt-4 mt-2">
+                <div className="w-full">
+                  <h4 className="text-sm font-bold text-zinc-800 mb-4 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-emerald-600" />
+                    Worker & Queue Settings
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Workers</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={queueWorkers}
+                        onChange={e => setQueueWorkers(parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-200 focus:ring-1 focus:ring-emerald-500 text-xs text-zinc-900"
+                      />
+                      <p className="text-[9px] text-zinc-500">Parallel API calls</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Batch Size</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={queueBatchSize}
+                        onChange={e => setQueueBatchSize(parseInt(e.target.value) || 10)}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-200 focus:ring-1 focus:ring-emerald-500 text-xs text-zinc-900"
+                      />
+                      <p className="text-[9px] text-zinc-500">Messages per run</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Delay (ms)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={queueDelayMs}
+                        onChange={e => setQueueDelayMs(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-200 focus:ring-1 focus:ring-emerald-500 text-xs text-zinc-900"
+                      />
+                      <p className="text-[9px] text-zinc-500">Gap between LLM calls</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
