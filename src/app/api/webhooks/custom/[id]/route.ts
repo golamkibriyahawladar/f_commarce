@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { triggerCompanyWebhooks } from '@/lib/webhookDispatcher';
-import { triggerAiReplyIfNeeded } from '@/lib/aiAgentExecutor';
+import { addToAiQueue } from '@/lib/queueProcessor';
 
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -164,21 +164,20 @@ async function handleMessageType(
   // Dispatch outgoing webhook
   await triggerCompanyWebhooks(integration.company_id, 'message.created', newMsg);
 
-  // Trigger AI reply (only for message type) and wait for it
-  const aiReply = await triggerAiReplyIfNeeded(
+  // Enqueue for AI reply via queue (instant, non-blocking)
+  await addToAiQueue(
     integration.company_id,
     conversation.id,
     integration.id,
     text
   ).catch(err => {
-    console.error('Error invoking AI reply execution loop:', err);
-    return null;
+    console.error('Error enqueuing AI reply:', err);
   });
 
   return NextResponse.json({ 
     success: true, 
     message: newMsg,
-    ai_reply: aiReply || null
+    queued: true
   });
 }
 
@@ -456,13 +455,13 @@ export async function POST(
       // Dispatch event to outgoing webhooks
       await triggerCompanyWebhooks(integration.company_id, 'message.created', newMsg);
 
-      // Trigger AI Auto-reply asynchronously if AI Autopilot is enabled
-      triggerAiReplyIfNeeded(
+      // Enqueue AI Auto-reply via queue (instant)
+      addToAiQueue(
         integration.company_id,
         conversation.id,
         integration.id,
         text
-      ).catch(err => console.error('Error invoking AI reply execution loop:', err));
+      ).catch(err => console.error('Error enqueuing AI reply:', err));
 
       return NextResponse.json({ success: true, message: newMsg });
     }

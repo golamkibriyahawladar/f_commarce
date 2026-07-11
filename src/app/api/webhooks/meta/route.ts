@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { triggerCompanyWebhooks } from '@/lib/webhookDispatcher';
-import { triggerAiReplyIfNeeded } from '@/lib/aiAgentExecutor';
+import { addToAiQueue } from '@/lib/queueProcessor';
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'autozy_secure_token';
 
@@ -176,8 +176,9 @@ async function handleIncomingMessage(pageId: string, senderId: string, text: str
       // Trigger Webhook Dispatcher
       await triggerCompanyWebhooks(integration.company_id, 'message.created', newMsg);
       
-      // Trigger AI Autopilot responder asynchronously
-      triggerAiReplyIfNeeded(integration.company_id, conversation.id, integration.id, text);
+      // Enqueue for AI auto-reply (instant, non-blocking)
+      addToAiQueue(integration.company_id, conversation.id, integration.id, text)
+        .catch(err => console.error('Error enqueuing AI reply:', err));
     }
   }
 }
