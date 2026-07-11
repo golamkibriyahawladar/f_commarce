@@ -255,7 +255,7 @@ export default function TokenAnalyticsPage() {
                                   <th className="px-4 py-2">Response Preview</th>
                                   <th className="px-4 py-2">Model Used</th>
                                   <th className="px-4 py-2 text-right">Time</th>
-                                  <th className="px-4 py-2 text-right">P / C / Total Tokens</th>
+                                  <th className="px-4 py-2 text-right">P / C / Overhead / Total</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-zinc-100">
@@ -263,6 +263,12 @@ export default function TokenAnalyticsPage() {
                                   const stats = msg.metadata.execution_stats || {};
                                   const usage = stats.usage || {};
                                   const perf = stats.performance || {};
+                                  
+                                  const pTokens = usage.prompt_tokens || 0;
+                                  const cTokens = usage.completion_tokens || 0;
+                                  const tTokens = usage.total_tokens || 0;
+                                  // API might charge extra tokens for internal overhead/padding
+                                  const overhead = Math.max(0, tTokens - (pTokens + cTokens));
                                   
                                   return (
                                     <tr key={msg.id} className="hover:bg-zinc-50/50">
@@ -280,11 +286,13 @@ export default function TokenAnalyticsPage() {
                                       </td>
                                       <td className="px-4 py-2.5 text-right">
                                         <div className="flex items-center justify-end gap-1 font-mono text-[10px]">
-                                          <span className="text-zinc-500" title="Prompt Tokens">{usage.prompt_tokens?.toLocaleString() || 0}</span>
+                                          <span className="text-zinc-500" title="Prompt Tokens">{pTokens.toLocaleString()}</span>
                                           <span className="text-zinc-300">/</span>
-                                          <span className="text-zinc-500" title="Completion (Output) Tokens">{usage.completion_tokens?.toLocaleString() || 0}</span>
+                                          <span className="text-zinc-500" title="Output Tokens">{cTokens.toLocaleString()}</span>
                                           <span className="text-zinc-300">/</span>
-                                          <span className="font-bold text-amber-600" title="Total Tokens">{usage.total_tokens?.toLocaleString() || 0}</span>
+                                          <span className="text-rose-400 font-medium" title="Internal Overhead/Padding">{overhead.toLocaleString()}</span>
+                                          <span className="text-zinc-300">/</span>
+                                          <span className="font-bold text-amber-600" title="Total Tokens">{tTokens.toLocaleString()}</span>
                                         </div>
                                       </td>
                                     </tr>

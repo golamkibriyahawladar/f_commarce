@@ -9,10 +9,7 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-// Helper to estimate token counts if api returns zero/null (safety fallback)
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
+// Removed token estimation per user request: we only trust exact API returned tokens.
 
 /**
  * Triggers the AI Agent auto-response loop if the conversation has AI Autopilot enabled
@@ -279,11 +276,22 @@ ${systemPrompt}`;
       aiReplyText = openAiData.choices?.[0]?.message?.content?.trim() || '';
       
       const usage = openAiData.usage || {};
+      let pTokens = usage.prompt_tokens || 0;
+      let cTokens = usage.completion_tokens || 0;
+      let tTokens = usage.total_tokens || 0;
+      
+      // Fix mismatch if total is provided but others were missing
+      if (tTokens > 0 && pTokens === 0 && cTokens === 0) {
+        // If API only returned total, we don't guess the split. Just keep them 0.
+      } else if (tTokens === 0 && (pTokens > 0 || cTokens > 0)) {
+        tTokens = pTokens + cTokens;
+      }
+
       llmRuns.push({
         run_index: 0,
-        prompt_tokens: usage.prompt_tokens || estimateTokens(systemPrompt),
-        completion_tokens: usage.completion_tokens || estimateTokens(aiReplyText),
-        total_tokens: usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens),
+        prompt_tokens: pTokens,
+        completion_tokens: cTokens,
+        total_tokens: tTokens,
         execution_time_ms: executionTime,
         model: modelUsed
       });
@@ -322,15 +330,19 @@ ${systemPrompt}`;
       aiReplyText = result.response?.text()?.trim() || '';
 
       const usageMetadata = (result.response?.usageMetadata || {}) as any;
-      const promptTokens = usageMetadata.promptTokenCount || estimateTokens(systemPrompt);
-      const completionTokens = usageMetadata.candidatesTokenCount || estimateTokens(aiReplyText);
-      const totalTokens = usageMetadata.totalTokenCount || (promptTokens + completionTokens);
+      let pTokens = usageMetadata.promptTokenCount || 0;
+      let cTokens = usageMetadata.candidatesTokenCount || 0;
+      let tTokens = usageMetadata.totalTokenCount || 0;
+
+      if (tTokens === 0 && (pTokens > 0 || cTokens > 0)) {
+        tTokens = pTokens + cTokens;
+      }
 
       llmRuns.push({
         run_index: 0,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: totalTokens,
+        prompt_tokens: pTokens,
+        completion_tokens: cTokens,
+        total_tokens: tTokens,
         execution_time_ms: executionTime,
         model: modelUsed
       });
@@ -374,11 +386,19 @@ ${systemPrompt}`;
       aiReplyText = data.choices?.[0]?.message?.content?.trim() || '';
       
       const usage = data.usage || {};
+      let pTokens = usage.prompt_tokens || 0;
+      let cTokens = usage.completion_tokens || 0;
+      let tTokens = usage.total_tokens || 0;
+
+      if (tTokens === 0 && (pTokens > 0 || cTokens > 0)) {
+        tTokens = pTokens + cTokens;
+      }
+
       llmRuns.push({
         run_index: 0,
-        prompt_tokens: usage.prompt_tokens || estimateTokens(systemPrompt),
-        completion_tokens: usage.completion_tokens || estimateTokens(aiReplyText),
-        total_tokens: usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens),
+        prompt_tokens: pTokens,
+        completion_tokens: cTokens,
+        total_tokens: tTokens,
         execution_time_ms: executionTime,
         model: modelUsed
       });
@@ -414,11 +434,15 @@ ${systemPrompt}`;
         const data = await res.json();
         aiReplyText = data.message?.content?.trim() || '';
         
+        let pTokens = data.prompt_eval_count || 0;
+        let cTokens = data.eval_count || 0;
+        let tTokens = pTokens + cTokens; // Ollama doesn't typically provide a total field directly
+
         llmRuns.push({
           run_index: 0,
-          prompt_tokens: data.prompt_eval_count || estimateTokens(systemPrompt),
-          completion_tokens: data.eval_count || estimateTokens(aiReplyText),
-          total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+          prompt_tokens: pTokens,
+          completion_tokens: cTokens,
+          total_tokens: tTokens,
           execution_time_ms: executionTime,
           model: modelUsed
         });
