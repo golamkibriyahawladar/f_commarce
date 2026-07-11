@@ -29,6 +29,8 @@ export default function CredentialsPage() {
   const [openrouterKey, setOpenrouterKey] = useState('');
   const [pineconeKey, setPineconeKey] = useState('');
   const [pineconeEnv, setPineconeEnv] = useState('');
+  const [fbSecret, setFbSecret] = useState('');
+  const [courierKey, setCourierKey] = useState('');
 
   // UI States
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
@@ -65,6 +67,8 @@ export default function CredentialsPage() {
         setOpenrouterKey(s.global_openrouter_key || '');
         setPineconeKey(s.global_pinecone_key || '');
         setPineconeEnv(s.global_pinecone_env || '');
+        setFbSecret(s.facebook_app_secret || '');
+        setCourierKey(s.steadfast_courier_key || '');
       }
     } catch (err) {
       console.error('Error fetching settings:', err);
@@ -282,6 +286,24 @@ export default function CredentialsPage() {
             setPineconeKey,
             'global_pinecone_key',
             { value: pineconeEnv, setValue: setPineconeEnv, dbKey: 'global_pinecone_env', placeholder: 'Pinecone Index Name' }
+          )}
+
+          {renderCard(
+            'Meta App Secret',
+            'For FB Pages & IG DM Sync',
+            <Key className="w-6 h-6 text-blue-600" />,
+            fbSecret,
+            setFbSecret,
+            'facebook_app_secret'
+          )}
+
+          {renderCard(
+            'Steadfast Courier',
+            'For booking parcels automatically',
+            <Key className="w-6 h-6 text-orange-600" />,
+            courierKey,
+            setCourierKey,
+            'steadfast_courier_key'
           )}
         </div>
       )}
