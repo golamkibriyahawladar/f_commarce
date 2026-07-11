@@ -23,7 +23,8 @@ import {
   Plug,
   BookOpen,
   UserCheck,
-  Code2
+  Code2,
+  BarChart3
 } from 'lucide-react';
 
 
@@ -141,6 +142,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: '/dashboard/crm', icon: <Users className="w-5 h-5" />, label: 'CRM & Delivery' },
     { href: '/dashboard/integrations', icon: <Plug className="w-5 h-5" />, label: 'Apps & API' },
     { href: '/dashboard/agents', icon: <UserCheck className="w-5 h-5" />, label: 'Agents' },
+    { href: '/dashboard/token-analytics', icon: <BarChart3 className="w-5 h-5" />, label: 'Token Analytics' },
 
     ...(SUPER_ADMIN_EMAILS.includes(profile?.email || '') 
       ? [{ href: '/dashboard/super-admin', icon: <ShieldAlert className="w-5 h-5 text-red-500" />, label: 'Super Admin Hub' }] 

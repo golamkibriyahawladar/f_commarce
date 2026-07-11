@@ -28,106 +28,7 @@ import {
   Cpu
 } from 'lucide-react';
 
-interface TelemetryStats {
-  chat_info?: {
-    session_id?: string;
-  };
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-  performance?: {
-    model_used?: string;
-    response_time_ms?: number;
-    llm_runs?: Array<{
-      run_index: number;
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-      execution_time_ms: number;
-      model: string;
-    }>;
-  };
-}
 
-const TelemetryDetails = ({ stats }: { stats: TelemetryStats }) => {
-  const [open, setOpen] = useState(false);
-  
-  if (!stats) return null;
-  
-  const usage = stats.usage || {};
-  const perf = stats.performance || {};
-  const model = perf.model_used || 'AI Model';
-  const timeSec = perf.response_time_ms ? (perf.response_time_ms / 1000).toFixed(2) : '0';
-  const tokens = usage.total_tokens || 0;
-  
-  return (
-    <div className="flex flex-col items-end text-[10px] text-zinc-550 select-none">
-      <button 
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 hover:text-zinc-900 transition-colors font-semibold px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 cursor-pointer"
-      >
-        <Zap className="w-3 h-3 text-amber-500 shrink-0" />
-        <span>Telemetry: {tokens.toLocaleString()} tokens · {timeSec}s ({model})</span>
-        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-      </button>
-      
-      {open && (
-        <div className="mt-1 w-64 bg-zinc-900 text-zinc-250 border border-zinc-800 rounded-xl p-3.5 shadow-xl text-left space-y-3 font-mono leading-relaxed animate-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between border-b border-zinc-850 pb-1.5 text-zinc-400 text-[9px] font-bold">
-            <div className="flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-amber-400" />
-              <span>AI EXECUTION STATISTICS</span>
-            </div>
-            <span className="text-zinc-500">ID: {stats.chat_info?.session_id?.slice(0, 8) || 'N/A'}</span>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
-            <div>
-              <span className="text-zinc-550 block">LLM Model:</span>
-              <span className="text-white font-bold">{model}</span>
-            </div>
-            <div>
-              <span className="text-zinc-550 block">Response Time:</span>
-              <span className="text-white font-bold">{timeSec}s</span>
-            </div>
-            <div>
-              <span className="text-zinc-550 block">Total Tokens:</span>
-              <span className="text-emerald-400 font-bold">{tokens.toLocaleString()}</span>
-            </div>
-            <div>
-              <span className="text-zinc-550 block">Split (P/C):</span>
-              <span className="text-zinc-300 font-bold">
-                {usage.prompt_tokens?.toLocaleString() || 0} / {usage.completion_tokens?.toLocaleString() || 0}
-              </span>
-            </div>
-          </div>
-          
-          {perf.llm_runs && perf.llm_runs.length > 0 && (
-            <div className="border-t border-zinc-850 pt-2 space-y-1.5">
-              <span className="text-zinc-500 text-[9px] font-bold uppercase block tracking-wider">LLM Runs Breakdown ({perf.llm_runs.length})</span>
-              <div className="space-y-1 max-h-24 overflow-y-auto pr-0.5">
-                {perf.llm_runs.map((run, idx) => (
-                  <div key={idx} className="bg-zinc-950 border border-zinc-850 p-2 rounded-lg text-[9px] space-y-1">
-                    <div className="flex justify-between font-bold text-zinc-300">
-                      <span>Run #{run.run_index ?? idx} ({run.model})</span>
-                      <span className="text-amber-400">{((run.execution_time_ms ?? 0) / 1000).toFixed(2)}s</span>
-                    </div>
-                    <div className="flex justify-between text-zinc-550">
-                      <span>Tokens: {run.total_tokens?.toLocaleString() || 0}</span>
-                      <span>{run.prompt_tokens?.toLocaleString() || 0} prompt / {run.completion_tokens?.toLocaleString() || 0} comp</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
 
 
 export default function InboxPage() {
@@ -400,9 +301,12 @@ export default function InboxPage() {
                       </div>
                     </div>
 
-                    {isAi && msg.metadata?.execution_stats && (
-                      <div className="flex justify-end pr-2 animate-in fade-in duration-300">
-                        <TelemetryDetails stats={msg.metadata.execution_stats} />
+                    {isAi && msg.metadata?.sent_by_ai_agent && (
+                      <div className="flex justify-end pr-1 mt-1 animate-in fade-in duration-300">
+                        <span className="text-[9px] text-zinc-500 font-semibold bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Bot className="w-3 h-3 text-orange-500" />
+                          {msg.metadata.sent_by_ai_agent}
+                        </span>
                       </div>
                     )}
                   </div>
