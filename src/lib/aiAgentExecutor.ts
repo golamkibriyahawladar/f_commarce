@@ -90,6 +90,12 @@ export async function triggerAiReplyIfNeeded(
       .maybeSingle();
     const companySettings = userCompany?.settings || {};
 
+    // Check Global AI Switch
+    if (companySettings.ai_autopilot_active === false) {
+      console.log(`Global AI Autopilot is disabled for company ${companyId}. Skipping AI reply.`);
+      return;
+    }
+
     // Fetch global fallbacks
     const { data: systemCompany } = await supabase
       .from('companies')

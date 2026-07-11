@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 
 
+import { supabase } from '@/lib/supabase';
+
 interface SidebarItemProps {
   href: string;
   icon: React.ReactNode;
@@ -60,6 +62,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    const fetchGlobalAiStatus = async () => {
+      if (!user) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/company-settings', {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // If not set, default to true
+          setAiAutopilot(data.settings?.ai_autopilot_active !== false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch AI settings', err);
+      }
+    };
+    fetchGlobalAiStatus();
+  }, [user]);
+
+  const toggleGlobalAi = async () => {
+    const newVal = !aiAutopilot;
+    setAiAutopilot(newVal); // Optimistic UI update
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch('/api/company-settings', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({ ai_autopilot_active: newVal })
+      });
+    } catch (err) {
+      console.error('Failed to update AI settings', err);
+      setAiAutopilot(!newVal); // Revert on failure
+    }
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -225,7 +267,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {aiAutopilot ? 'AI Active' : 'AI Off'}
               </span>
               <button 
-                onClick={() => setAiAutopilot(!aiAutopilot)}
+                onClick={toggleGlobalAi}
                 role="switch"
                 aria-checked={aiAutopilot}
                 className={`relative inline-flex h-5 w-9 sm:h-6 sm:w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
