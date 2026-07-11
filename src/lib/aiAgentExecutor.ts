@@ -116,10 +116,31 @@ export async function triggerAiReplyIfNeeded(
     let ragContext = '';
 
     if (activeTools.includes('search_knowledge_base')) {
-      const pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
-      const pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
-      const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${assignedAgent.id}`;
-      const embeddingProvider = credentials.embedding_provider || 'openai';
+      // Find the knowledge base from credentials
+      let pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
+      let pineconeIndex = '';
+      let pineconeNamespace = '';
+      let embeddingProvider = 'openai';
+
+      if (credentials.knowledge_base_id) {
+        // Fetch KB config from DB
+        const { data: kbData } = await supabase
+          .from('knowledge_bases')
+          .select('*')
+          .eq('id', credentials.knowledge_base_id)
+          .single();
+        
+        if (kbData) {
+          pineconeIndex = kbData.pinecone_index || companySettings.global_pinecone_env || globalSettings.global_pinecone_env;
+          pineconeNamespace = kbData.pinecone_namespace;
+          embeddingProvider = kbData.embedding_provider || 'openai';
+        }
+      } else {
+        // Fallback for older agents
+        pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
+        pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${assignedAgent.id}`;
+        embeddingProvider = credentials.embedding_provider || 'openai';
+      }
 
       if (pineconeApiKey && pineconeIndex) {
         try {

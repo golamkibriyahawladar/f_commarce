@@ -33,19 +33,20 @@ export async function POST(req: Request) {
     // If key is provided and not masked, use it
     if (apiKey && apiKey !== '••••••••' && apiKey.trim() !== '') {
       resolvedKey = apiKey.trim();
-      // 2. If no agent custom key, check user's company settings key
-      if (!resolvedKey && companyId) {
-        const { data: company } = await supabase
-          .from('companies')
-          .select('settings')
-          .eq('id', companyId)
-          .maybeSingle();
-        
-        if (company?.settings) {
-          if (provider === 'openai') resolvedKey = company.settings.global_openai_key;
-          else if (provider === 'gemini') resolvedKey = company.settings.global_gemini_key;
-          else if (provider === 'openrouter') resolvedKey = company.settings.global_openrouter_key;
-        }
+    }
+    
+    // 2. If no agent custom key, check user's company settings key
+    if (!resolvedKey && companyId) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('settings')
+        .eq('id', companyId)
+        .maybeSingle();
+      
+      if (company?.settings) {
+        if (provider === 'openai') resolvedKey = company.settings.global_openai_key;
+        else if (provider === 'gemini') resolvedKey = company.settings.global_gemini_key;
+        else if (provider === 'openrouter') resolvedKey = company.settings.global_openrouter_key;
       }
     }
 

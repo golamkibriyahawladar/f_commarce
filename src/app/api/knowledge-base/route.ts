@@ -49,14 +49,14 @@ async function getGlobalSettings(supabase: any) {
   return data?.settings || {};
 }
 
-// GET: List files in the knowledge base for a specific agent
+// GET: List files in the knowledge base
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const agentId = searchParams.get('agentId');
+    const knowledgeBaseId = searchParams.get('knowledgeBaseId');
     const companyId = searchParams.get('companyId');
 
-    if (!agentId || !companyId) {
+    if (!knowledgeBaseId || !companyId) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
@@ -90,7 +90,7 @@ export async function GET(req: Request) {
     const { data: files, error } = await supabaseService
       .from('knowledge_base_files')
       .select('*')
-      .eq('integration_id', agentId)
+      .eq('knowledge_base_id', knowledgeBaseId)
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -129,11 +129,11 @@ export async function POST(req: Request) {
     // Parse formData
     const formData = await req.formData();
     const companyId = formData.get('companyId') as string;
-    const agentId = formData.get('agentId') as string;
+    const knowledgeBaseId = formData.get('knowledgeBaseId') as string;
     const file = formData.get('file') as File;
 
-    if (!companyId || !agentId || !file) {
-      return NextResponse.json({ error: 'Missing companyId, agentId, or file' }, { status: 400 });
+    if (!companyId || !knowledgeBaseId || !file) {
+      return NextResponse.json({ error: 'Missing companyId, knowledgeBaseId, or file' }, { status: 400 });
     }
 
     // Check tenant boundary
@@ -142,21 +142,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Fetch AI Agent Configuration
-    const { data: agent, error: agentErr } = await supabaseService
-      .from('integrations')
+    // Fetch Knowledge Base Configuration
+    const { data: kb, error: kbErr } = await supabaseService
+      .from('knowledge_bases')
       .select('*')
-      .eq('id', agentId)
+      .eq('id', knowledgeBaseId)
       .eq('company_id', companyId)
       .single();
 
-    if (agentErr || !agent) {
-      return NextResponse.json({ error: 'AI Agent not found' }, { status: 404 });
+    if (kbErr || !kb) {
+      return NextResponse.json({ error: 'Knowledge Base not found' }, { status: 404 });
     }
 
-    // Parse the agent's credentials
-    const credentials = agent.credentials || {};
-    const embeddingProvider = credentials.embedding_provider || 'openai';
+    const embeddingProvider = kb.embedding_provider || 'openai';
     
     // Fetch Company Settings
     const { data: companyData } = await supabaseService
@@ -170,12 +168,12 @@ export async function POST(req: Request) {
 
     // Pinecone Credentials
     const pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
-    const pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
-    const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${agentId}`;
+    const pineconeIndex = kb.pinecone_index || companySettings.global_pinecone_env || globalSettings.global_pinecone_env;
+    const pineconeNamespace = kb.pinecone_namespace || kb.id;
 
     if (!pineconeApiKey || !pineconeIndex) {
       return NextResponse.json({ 
-        error: 'Pinecone details are not configured for this AI Agent. Please setup Pinecone API Key & Index first.' 
+        error: 'Pinecone details are not configured. Please setup Pinecone API Key & Index.' 
       }, { status: 400 });
     }
 
@@ -192,7 +190,7 @@ export async function POST(req: Request) {
         await supabaseService
           .from('knowledge_base_files')
           .delete()
-          .eq('integration_id', agentId)
+          .eq('knowledge_base_id', knowledgeBaseId)
           .eq('company_id', companyId);
       } catch (pcErr: any) {
         console.error('Pinecone/DB purge exception during overwrite:', pcErr);
@@ -236,7 +234,7 @@ export async function POST(req: Request) {
       .from('knowledge_base_files')
       .insert({
         company_id: companyId,
-        integration_id: agentId,
+        knowledge_base_id: knowledgeBaseId,
         file_name: file.name,
         size_bytes: file.size,
         chunk_count: chunks.length,
@@ -249,8 +247,6 @@ export async function POST(req: Request) {
     if (kbFileErr || !kbFile) {
       throw new Error('Failed to create knowledge base file entry: ' + kbFileErr?.message);
     }
-
-    // Fallback settings already loaded
 
     // Generate Embeddings
     const vectors: Array<{ id: string; values: number[]; metadata: { text: string; file_name: string; company_id: string; file_id: string } }> = [];
@@ -298,7 +294,7 @@ export async function POST(req: Request) {
         });
       }
     } else if (embeddingProvider === 'gemini') {
-      const geminiKey = companySettings.global_gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key; // using global key or fallback
+      const geminiKey = companySettings.global_gemini_key || globalSettings.global_gemini_key || globalSettings.global_openai_key;
       if (!geminiKey) {
         throw new Error('Gemini API key missing. Please configure a custom key or set a global fallback key.');
       }
@@ -371,9 +367,9 @@ export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url);
     const fileId = searchParams.get('fileId');
     const companyId = searchParams.get('companyId');
-    const agentId = searchParams.get('agentId');
+    const knowledgeBaseId = searchParams.get('knowledgeBaseId');
 
-    if (!fileId || !companyId || !agentId) {
+    if (!fileId || !companyId || !knowledgeBaseId) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
@@ -415,19 +411,18 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'File metadata not found' }, { status: 404 });
     }
 
-    // 2. Fetch agent config to get Pinecone credentials
-    const { data: agent, error: agentErr } = await supabaseService
-      .from('integrations')
+    // 2. Fetch KB config to get Pinecone credentials
+    const { data: kb, error: kbErr } = await supabaseService
+      .from('knowledge_bases')
       .select('*')
-      .eq('id', agentId)
+      .eq('id', knowledgeBaseId)
       .eq('company_id', companyId)
       .single();
 
-    if (agentErr || !agent) {
-      return NextResponse.json({ error: 'AI Agent config not found' }, { status: 404 });
+    if (kbErr || !kb) {
+      return NextResponse.json({ error: 'Knowledge Base not found' }, { status: 404 });
     }
 
-    const credentials = agent.credentials || {};
     // Fetch Company Settings
     const { data: companyData } = await supabaseService
       .from('companies')
@@ -439,8 +434,8 @@ export async function DELETE(req: Request) {
     const globalSettings = await getGlobalSettings(supabaseService);
 
     const pineconeApiKey = companySettings.global_pinecone_key || globalSettings.global_pinecone_key;
-    const pineconeIndex = companySettings.global_pinecone_env || credentials.pinecone_index || globalSettings.global_pinecone_env;
-    const pineconeNamespace = credentials.pinecone_namespace || `${companyId}_${agentId}`;
+    const pineconeIndex = kb.pinecone_index || companySettings.global_pinecone_env || globalSettings.global_pinecone_env;
+    const pineconeNamespace = kb.pinecone_namespace || kb.id;
 
     // 3. Purge vectors from Pinecone if details exist
     if (pineconeApiKey && pineconeIndex) {

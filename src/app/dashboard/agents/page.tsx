@@ -50,6 +50,7 @@ interface Integration {
     embedding_provider?: 'openai' | 'gemini';
     active_tools?: string[];
     assigned_integrations?: string[];
+    knowledge_base_id?: string;
     [key: string]: any;
   };
   webhook_url?: string;
@@ -103,6 +104,8 @@ export default function AIAgentsPage() {
   const [kbFiles, setKbFiles] = useState<KBFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [kbs, setKbs] = useState<any[]>([]);
+  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState<string>('');
   
   // 5. Tools Tab
   const [activeTools, setActiveTools] = useState<string[]>([]);
@@ -154,6 +157,13 @@ export default function AIAgentsPage() {
 
       setAgents(aiAgents);
       setChannels(communicationChannels);
+
+      // Fetch Knowledge Bases
+      const { data: kbData } = await supabase
+        .from('knowledge_bases')
+        .select('*')
+        .eq('company_id', profile.company_id);
+      setKbs(kbData || []);
     } catch (err: any) {
       console.error(err);
       showToast('Error loading agents: ' + err.message, 'error');
@@ -228,18 +238,8 @@ export default function AIAgentsPage() {
       }
     } catch (err: any) {
       console.error('Error fetching models:', err?.message || err);
-      const fallbacks = provider === 'openai' 
-        ? ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo']
-        : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-2.0-flash-exp'];
-      setModelsList(fallbacks);
-      const activeModel = currentModelName || modelName;
-      if (forceSelectFirst) {
-        setModelName(fallbacks[0]);
-      } else if (activeModel) {
-        setModelName(activeModel);
-      } else {
-        setModelName(fallbacks[0]);
-      }
+      setModelsList([]);
+      setModelName('');
       setApiConnectionStatus('disconnected');
     } finally {
       setLoadingModels(false);
@@ -349,13 +349,9 @@ export default function AIAgentsPage() {
     setPineconeIndexes([]);
     setPineconeConnectionStatus('idle');
     setLoadingPineconeIndexes(false);
-    setIngestMode('file');
-    setRawTextTitle('');
-    setRawTextContent('');
-    setClearBeforeIngest(false);
-
+    setSelectedKnowledgeBaseId('');
+    
     // Files and tools
-    setKbFiles([]);
     setActiveTools([]);
     
     setShowKey(false);
@@ -388,10 +384,7 @@ export default function AIAgentsPage() {
     setPineconeIndexes(creds.pinecone_index ? [creds.pinecone_index] : []);
     setPineconeConnectionStatus('idle'); // Will check automatically
     setLoadingPineconeIndexes(false);
-    setIngestMode('file');
-    setRawTextTitle('');
-    setRawTextContent('');
-    setClearBeforeIngest(false);
+    setSelectedKnowledgeBaseId(creds.knowledge_base_id || '');
 
     // Tools
     setActiveTools(creds.active_tools || []);
@@ -400,8 +393,6 @@ export default function AIAgentsPage() {
     setShowGeminiKey(false);
     setShowPineconeKey(false);
     
-    // Fetch files and Pinecone indexes in background
-    fetchKbFiles(agent.id);
     syncPineconeIndexes();
     
     const activeProvider = creds.llm_provider || 'openai';
@@ -521,8 +512,7 @@ export default function AIAgentsPage() {
         system_prompt: systemPrompt.trim(),
         llm_provider: llmProvider,
         model_name: modelName || (llmProvider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'),
-        pinecone_index: pineconeIndex.trim(),
-        pinecone_namespace: pineconeNamespace.trim(),
+        knowledge_base_id: selectedKnowledgeBaseId,
         embedding_provider: embeddingProvider,
         active_tools: activeTools,
         assigned_integrations: assignedChannelIds
@@ -1036,13 +1026,10 @@ export default function AIAgentsPage() {
                           <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0 text-zinc-500" />
                           Verifying...
                         </span>
-                      ) : (llmProvider === 'openai' ? openaiKey : geminiKey) ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          ✓ Key Saved
-                        </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-50 text-zinc-450 border border-zinc-200">
-                          Optional
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                          <AlertCircle className="w-2.5 h-2.5 shrink-0 text-red-600" />
+                          Not Connected
                         </span>
                       )}
                     </div>
@@ -1085,10 +1072,12 @@ export default function AIAgentsPage() {
                       value={modelName}
                       onChange={(e) => setModelName(e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
-                      disabled={loadingModels}
+                      disabled={loadingModels || apiConnectionStatus !== 'connected'}
                     >
                       {loadingModels ? (
                         <option value="">Loading available models...</option>
+                      ) : apiConnectionStatus !== 'connected' ? (
+                        <option value="">No models available (API Key not connected)</option>
                       ) : (
                         <>
                           {modelsList.map(model => (
@@ -1114,239 +1103,24 @@ export default function AIAgentsPage() {
                   <div className="bg-zinc-50 border border-zinc-200/80 rounded-xl p-4 flex items-start gap-2.5">
                     <Database className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                     <div className="text-xs leading-relaxed text-zinc-650">
-                      <p className="font-bold text-zinc-800 mb-0.5">Knowledge Base & Vector Database</p>
-                      Connect your Pinecone vector database, upload documents or paste raw text to build an AI knowledge base. The agent will use this data to answer questions using RAG (Retrieval-Augmented Generation).
+                      <p className="font-bold text-zinc-800 mb-0.5">Knowledge Base</p>
+                      Select a knowledge base for this agent to use for RAG (Retrieval-Augmented Generation). You can create and manage knowledge bases in the Knowledge Base tab under Apps & API.
                     </div>
                   </div>
 
-                  {/* Pinecone API Key removed, now managed globally in Credentials tab */}
-                  {/* Index + Namespace */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Index Name</label>
-                      {pineconeIndexes.length > 0 ? (
-                        <select
-                          value={pineconeIndex}
-                          onChange={(e) => setPineconeIndex(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
-                        >
-                          <option value="">— Select Index —</option>
-                          {pineconeIndexes.map(idx => (
-                            <option key={idx} value={idx}>{idx}</option>
-                          ))}
-                          {pineconeIndex && !pineconeIndexes.includes(pineconeIndex) && (
-                            <option value={pineconeIndex}>{pineconeIndex} (Current)</option>
-                          )}
-                        </select>
-                      ) : (
-                        <input 
-                          type="text" 
-                          placeholder="e.g. aichat-index"
-                          value={pineconeIndex}
-                          onChange={(e) => setPineconeIndex(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
-                        />
-                      )}
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Namespace</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. custom-space"
-                        value={pineconeNamespace}
-                        onChange={(e) => setPineconeNamespace(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
-                      />
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <input 
-                          type="checkbox"
-                          id="clearBeforeIngest"
-                          checked={clearBeforeIngest}
-                          onChange={(e) => setClearBeforeIngest(e.target.checked)}
-                          className="w-3.5 h-3.5 text-emerald-600 border-zinc-300 rounded focus:ring-emerald-500 cursor-pointer"
-                        />
-                        <label htmlFor="clearBeforeIngest" className="text-[10px] font-bold text-zinc-550 cursor-pointer select-none">
-                          Clear namespace before upload / ingest (overwrite)
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Embedding Provider */}
                   <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Embedding Provider</label>
-                      {isEmbeddingConnected ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
-                          Connected
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          Set LLM API key first
-                        </span>
-                      )}
-                    </div>
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">Select Knowledge Base</label>
                     <select
-                      value={embeddingProvider}
-                      onChange={(e) => setEmbeddingProvider(e.target.value as 'openai' | 'gemini')}
+                      value={selectedKnowledgeBaseId}
+                      onChange={(e) => setSelectedKnowledgeBaseId(e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-xs font-semibold text-zinc-850"
                     >
-                      <option value="openai">OpenAI Embeddings (text-embedding-3-small)</option>
-                      <option value="gemini">Google Gemini Embeddings (gemini-embedding-001)</option>
+                      <option value="">— None —</option>
+                      {kbs.map(kb => (
+                        <option key={kb.id} value={kb.id}>{kb.name} ({kb.embedding_provider.toUpperCase()})</option>
+                      ))}
                     </select>
                   </div>
-
-                  {/* Ingest Content Section */}
-                  <div className="border-t border-zinc-200 pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">Ingest Content</label>
-                      <div className="flex bg-zinc-100 rounded-lg p-0.5 border border-zinc-200">
-                        <button
-                          type="button"
-                          onClick={() => setIngestMode('file')}
-                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                            ingestMode === 'file' ? 'bg-white text-zinc-900 shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-700 border border-transparent'
-                          }`}
-                        >
-                          📄 Upload File
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIngestMode('text')}
-                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                            ingestMode === 'text' ? 'bg-white text-zinc-900 shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-700 border border-transparent'
-                          }`}
-                        >
-                          ✏️ Paste Text
-                        </button>
-                      </div>
-                    </div>
-
-                    {!selectedAgent ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-                        <AlertCircle className="w-5 h-5 text-amber-500 mx-auto mb-1" />
-                        <p className="text-xs font-bold text-amber-800">Save the agent first</p>
-                        <p className="text-[10px] text-amber-600 mt-0.5">Create and save this AI Agent before uploading documents or pasting text.</p>
-                      </div>
-                    ) : ingestMode === 'file' ? (
-                      <div className="border-2 border-dashed border-zinc-250 rounded-2xl p-5 text-center flex flex-col items-center justify-center bg-zinc-50/50 hover:bg-zinc-50 transition-colors relative">
-                        <input 
-                          type="file" 
-                          accept=".pdf,.docx,.md,.txt" 
-                          onChange={handleFileUpload} 
-                          disabled={uploadingFile}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                        />
-                        {uploadingFile ? (
-                          <div className="space-y-2 flex flex-col items-center">
-                            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-                            <span className="text-xs font-bold text-zinc-700">Chunking & Uploading vectors...</span>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <UploadCloud className="w-10 h-10 text-zinc-400 mx-auto" />
-                            <div>
-                              <p className="text-xs font-bold text-zinc-800">Drag and drop file here, or click to upload</p>
-                              <p className="text-[10px] text-zinc-450 mt-0.5">Supports PDF, DOCX, Markdown, Text (.txt)</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <input
-                          type="text"
-                          placeholder="Document title (e.g. Product FAQ)"
-                          value={rawTextTitle}
-                          onChange={(e) => setRawTextTitle(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs transition-colors"
-                        />
-                        <textarea
-                          rows={6}
-                          placeholder="Paste your raw text content here... (e.g. product descriptions, FAQ answers, policy documents)"
-                          value={rawTextContent}
-                          onChange={(e) => setRawTextContent(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-250 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white text-zinc-800 text-xs font-mono transition-colors resize-none"
-                        />
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] text-zinc-400 font-semibold">{rawTextContent.length} characters</span>
-                          <button
-                            type="button"
-                            onClick={handleIngestRawText}
-                            disabled={uploadingFile || !rawTextContent.trim()}
-                            className="flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
-                          >
-                            {uploadingFile ? (
-                              <>
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                <span>Ingesting...</span>
-                              </>
-                            ) : (
-                              <>
-                                <UploadCloud className="w-3.5 h-3.5" />
-                                <span>Ingest Text</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Documents List */}
-                  {selectedAgent && (
-                    <div className="border border-zinc-200 rounded-2xl bg-white flex flex-col max-h-[30vh]">
-                      <div className="bg-zinc-50 px-4 py-2 border-b border-zinc-150 text-[10px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">
-                        Uploaded Documents ({kbFiles.length})
-                      </div>
-                      {loadingFiles ? (
-                        <div className="flex items-center justify-center p-8 text-xs text-zinc-450 gap-2">
-                          <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" /> Loading files...
-                        </div>
-                      ) : kbFiles.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-8 text-center text-zinc-400 text-xs">
-                          <FileUp className="w-8 h-8 text-zinc-300 mb-1" />
-                          No files in the knowledge base yet.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-zinc-150 overflow-y-auto">
-                          {kbFiles.map((file) => {
-                            const sizeKB = (file.size_bytes / 1024).toFixed(1);
-                            return (
-                              <div key={file.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-zinc-50/50">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <FileText className="w-5 h-5 text-zinc-450 shrink-0" />
-                                  <div className="min-w-0">
-                                    <div className="font-bold text-zinc-900 text-xs truncate max-w-[200px]">{file.file_name}</div>
-                                    <div className="text-[10px] text-zinc-400 mt-0.5 font-semibold">
-                                      {sizeKB} KB · {file.chunk_count} chunks · <span className="uppercase text-[9px]">{file.embedding_provider}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
-                                    file.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                    file.status === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
-                                    'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
-                                  }`}>
-                                    {file.status}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleFileDelete(file.id)}
-                                    className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors cursor-pointer"
-                                  >
-                                    <Trash2 className="w-4.5 h-4.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 

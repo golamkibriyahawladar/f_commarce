@@ -393,6 +393,9 @@ export default function DeveloperPage() {
         <Link href="/dashboard/credentials" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
           Credentials
         </Link>
+        <Link href="/dashboard/knowledge-base" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+          Knowledge Base
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

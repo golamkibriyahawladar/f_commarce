@@ -349,6 +349,9 @@ export default function IntegrationsPage() {
         <Link href="/dashboard/credentials" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
           Credentials
         </Link>
+        <Link href="/dashboard/knowledge-base" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+          Knowledge Base
+        </Link>
       </div>
 
       {/* Connected Integrations List */}
