@@ -501,8 +501,146 @@ export default function IntegrationsPage() {
         )}
       </div>
 
+      {/* Available Channels & Integrations Grid */}
+      <div className="mt-10 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-zinc-900 tracking-tight">Available Integration Channels</h2>
+          <p className="text-xs text-zinc-500 mt-0.5">Connect your Facebook Pages, Instagram, WhatsApp, or Webhooks to start automating messages.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1. Facebook Page Card */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100">
+                  <Facebook className="w-6 h-6 text-blue-600" />
+                </div>
+                {integrations.some(i => i.provider === 'facebook') && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                    Connected
+                  </span>
+                )}
+              </div>
+              <h3 className="font-bold text-zinc-900 text-base mb-1">Facebook Page</h3>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Connect Facebook Page DMs, comments, and lead ads for automated AI replies.
+              </p>
+            </div>
+            <div className="pt-4 mt-4 border-t border-zinc-100">
+              <button
+                onClick={handleConnectFacebook}
+                disabled={fbConnecting || igConnecting}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs py-2 px-3 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              >
+                {fbConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Facebook className="w-3.5 h-3.5" />}
+                {fbConnecting ? 'Connecting...' : 'Connect Facebook Page'}
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Instagram Direct Card */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2.5 bg-pink-50 rounded-xl border border-pink-100">
+                  <Instagram className="w-6 h-6 text-pink-600" />
+                </div>
+                {integrations.some(i => i.provider === 'instagram') && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                    Connected
+                  </span>
+                )}
+              </div>
+              <h3 className="font-bold text-zinc-900 text-base mb-1">Instagram Direct</h3>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Manage Instagram DMs, story replies, and automated comment responses.
+              </p>
+            </div>
+            <div className="pt-4 mt-4 border-t border-zinc-100">
+              <button
+                onClick={handleConnectInstagram}
+                disabled={fbConnecting || igConnecting}
+                className="w-full flex items-center justify-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-semibold text-xs py-2 px-3 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              >
+                {igConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Instagram className="w-3.5 h-3.5" />}
+                {igConnecting ? 'Connecting...' : 'Connect Instagram'}
+              </button>
+            </div>
+          </div>
+
+          {/* 3. WhatsApp Business Card */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-100">
+                  <MessageCircle className="w-6 h-6 text-emerald-600" />
+                </div>
+                {integrations.some(i => i.provider === 'whatsapp') && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                    Connected
+                  </span>
+                )}
+              </div>
+              <h3 className="font-bold text-zinc-900 text-base mb-1">WhatsApp Business</h3>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Connect official Meta WhatsApp Cloud API for customer support and broadcasts.
+              </p>
+            </div>
+            <div className="pt-4 mt-4 border-t border-zinc-100">
+              <button
+                onClick={() => {
+                  setSelectedProvider('whatsapp');
+                  setIsAddModalOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 px-3 rounded-xl transition-all shadow-sm active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Setup WhatsApp API
+              </button>
+            </div>
+          </div>
+
+          {/* 4. Custom Webhook Card */}
+          <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <Webhook className="w-6 h-6 text-indigo-500" />
+                </div>
+                {hasWebhook && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                    Connected
+                  </span>
+                )}
+              </div>
+              <h3 className="font-bold text-zinc-900 text-base mb-1">Custom Webhook</h3>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                Send real-time lead, order, and customer checkout events to external servers.
+              </p>
+            </div>
+            <div className="pt-4 mt-4 border-t border-zinc-100">
+              <button
+                onClick={() => {
+                  if (hasWebhook) {
+                    showToast('You have already connected a webhook integration.', 'warning');
+                    return;
+                  }
+                  setSelectedProvider('webhook');
+                  setIsAddModalOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 px-3 rounded-xl transition-all shadow-sm active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Configure Webhook
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Available Integration Categories / General Guide */}
-      <div className="mt-12 bg-emerald-50/50 rounded-2xl p-8 border border-emerald-100/50 relative overflow-hidden">
+      <div className="mt-8 bg-emerald-50/50 rounded-2xl p-8 border border-emerald-100/50 relative overflow-hidden">
         <div className="absolute -right-10 -top-10 text-emerald-100 opacity-50 rotate-12">
           <Settings2 className="w-64 h-64" />
         </div>

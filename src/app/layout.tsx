@@ -21,9 +21,35 @@ const notoBengali = Noto_Sans_Bengali({
 export const metadata: Metadata = {
   title: "Autozy — Automation Suite",
   description: "Autozy Automation Suite — Omnichannel inbox, Meta Ads, CRM, and AI-powered commerce automation.",
+  keywords: ["AI Chatbot", "Omnichannel Inbox", "CRM", "Meta Ads Automation", "E-commerce Automation", "Autozy"],
+  authors: [{ name: "Autozy Team" }],
+  openGraph: {
+    title: "Autozy — Automation Suite",
+    description: "Omnichannel inbox, Meta Ads, CRM, and AI-powered commerce automation.",
+    url: "https://autozy.app",
+    siteName: "Autozy",
+    images: [
+      {
+        url: "/og-image.png", // Ensure you add this image to public/ folder
+        width: 1200,
+        height: 630,
+        alt: "Autozy Automation Suite",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Autozy — Automation Suite",
+    description: "Omnichannel inbox, Meta Ads, CRM, and AI-powered commerce automation.",
+    images: ["/og-image.png"],
+  },
   icons: {
     icon: "/icon.svg",
+    apple: "/apple-touch-icon.png",
   },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

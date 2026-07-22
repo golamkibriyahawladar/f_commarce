@@ -243,6 +243,9 @@ export default function CredentialsPage() {
         <Link href="/dashboard/credentials" className="border-b-2 border-emerald-600 text-emerald-700 font-semibold pb-3 px-1 text-sm">
           Credentials
         </Link>
+        <Link href="/dashboard/knowledge-base" className="text-zinc-500 hover:text-zinc-700 font-medium pb-3 px-1 text-sm transition-colors">
+          Knowledge Base
+        </Link>
       </div>
 
       {loading ? (
